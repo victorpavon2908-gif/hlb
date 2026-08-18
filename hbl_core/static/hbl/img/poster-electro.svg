@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="900" viewBox="0 0 800 900" fill="none">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#00C2FF"/><stop offset="1" stop-color="#7C5CFC"/></linearGradient></defs>
+<rect width="800" height="900" rx="44" fill="#0B1020"/>
+<circle cx="640" cy="160" r="190" fill="url(#g)" fill-opacity="0.28"/>
+<circle cx="160" cy="780" r="210" fill="url(#g)" fill-opacity="0.20"/>
+<rect x="46" y="46" width="708" height="808" rx="36" stroke="white" stroke-opacity="0.08"/>
+<text x="70" y="130" fill="#D8DEF0" font-family="Arial, Helvetica, sans-serif" font-size="28" letter-spacing="8">HBL MUSIC</text>
+<text x="70" y="350" fill="white" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="86">ELECTRO</text>
+<text x="70" y="420" fill="#C3CCE6" font-family="Arial, Helvetica, sans-serif" font-size="34">Neon Session</text>
+<g opacity="0.95"><circle cx="594" cy="520" r="110" fill="url(#g)"/><rect x="250" y="500" width="250" height="30" rx="15" fill="white" fill-opacity="0.10"/><rect x="250" y="548" width="210" height="30" rx="15" fill="white" fill-opacity="0.10"/><rect x="250" y="596" width="170" height="30" rx="15" fill="white" fill-opacity="0.10"/></g>
+<text x="70" y="760" fill="white" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="54">10s listen</text>
+<text x="70" y="814" fill="#C3CCE6" font-family="Arial, Helvetica, sans-serif" font-size="30">Genres · Hits · Best Moments</text>
+</svg>

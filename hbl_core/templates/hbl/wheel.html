@@ -1,0 +1,20 @@
+{% extends 'hbl/base.html' %}{% load static %}
+{% block title %}Ruleta · HBL{% endblock %}
+{% block content %}
+<section class="page-title wheel-title"><span class="eyebrow">✦ PROMOCIÓN HBL</span><h1>{{ config.title }}</h1><p>{{ config.subtitle }}. Tienes {{ config.spins_per_day }} giro{{ config.spins_per_day|pluralize }} gratuito{{ config.spins_per_day|pluralize }} por día{% if config.require_active_membership %} con membresía activa{% endif %}.{% if platform.wheel_requires_qualified_referral %} Necesitas {{ wheel_referrals_required }} referido(s) calificado(s) con recarga; hoy tienes {{ qualified_referrals }}.{% endif %}</p></section>
+<section class="wheel-layout">
+  <div class="wheel-stage glass-card">
+    <div class="wheel-pointer">▼</div>
+    <div id="hbl-wheel" class="fortune-wheel" data-spin-url="{% url 'hbl_wheel_spin' %}">
+      <div class="wheel-center"><img src="{% static 'hbl/img/logo.svg' %}" alt="HBL"><span>GIRAR</span></div>
+    </div>
+    <div id="wheel-prizes-data" hidden>{% for prize in prizes %}<i data-id="{{ prize.id }}" data-name="{{ prize.name }}" data-icon="{{ prize.icon }}" data-color="{{ prize.color }}"></i>{% endfor %}</div>
+    <button id="wheel-spin-btn" class="primary-btn glow-btn wheel-button" {% if not can_spin %}disabled{% endif %}>✦ Girar gratis</button>
+    <p id="wheel-result" class="wheel-result" aria-live="polite">{% if not config.enabled %}La ruleta está pausada.{% elif not membership and config.require_active_membership %}Activa una membresía para participar.{% elif platform.wheel_requires_qualified_referral and qualified_referrals < wheel_referrals_required %}Necesitas {{ wheel_referrals_required }} referido(s) calificado(s) con recarga para habilitar la ruleta.{% elif spins_today >= config.spins_per_day %}Ya utilizaste tus giros de hoy.{% else %}Toca girar para descubrir tu premio.{% endif %}</p>
+    <small class="muted center">{{ config.terms }}</small>
+  </div>
+  <section class="panel prize-panel"><span class="eyebrow">PREMIOS ACTIVOS</span><h2>Lo que puedes ganar</h2><div class="prize-list">{% for prize in prizes %}<div class="prize-row"><span class="prize-orb" style="--prize-color:{{ prize.color }}">{{ prize.icon }}</span><div><b>{{ prize.name }}</b><small>{% if prize.reward_type == 'balance' %}{{ platform.base_currency_symbol }} {{ prize.value }} al saldo{% elif prize.reward_type == 'membership_days' %}{{ prize.value|floatformat:0 }} día(s) extra{% else %}Premio sorpresa sin saldo{% endif %}</small></div></div>{% empty %}<p class="muted">No hay premios activos.</p>{% endfor %}</div><div class="control-highlight"><b>Uso de hoy</b><span>{{ spins_today }}/{{ config.spins_per_day }} giros utilizados</span></div></section>
+</section>
+<section class="panel space-top"><h2>Tus últimos giros</h2><div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Premio</th><th>Valor acreditado</th></tr></thead><tbody>{% for spin in recent %}<tr><td>{{ spin.created_at|date:'d/m/Y H:i' }}</td><td>{{ spin.prize.icon }} {{ spin.prize.name }}</td><td>{{ platform.base_currency_symbol }} {{ spin.reward_amount }}</td></tr>{% empty %}<tr><td colspan="3">Todavía no has girado.</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}
+{% block scripts %}<script defer src="{% static 'hbl/js/wheel.js' %}"></script>{% endblock %}

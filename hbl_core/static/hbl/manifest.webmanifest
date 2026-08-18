@@ -1,0 +1,25 @@
+{
+  "name": "HBL Ultra · Music Rewards",
+  "short_name": "HBL",
+  "description": "Membresías de música, tareas de escucha, recompensas y promociones HBL.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#090c16",
+  "theme_color": "#11172a",
+  "icons": [
+    {
+      "src": "/static/hbl/img/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/hbl/img/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

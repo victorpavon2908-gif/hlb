@@ -1,0 +1,173 @@
+{% extends 'hbl/base.html' %}
+{% block title %}Retiros · HBL{% endblock %}
+{% block content %}
+<section class="page-title compact-title">
+  <span class="eyebrow">RETIROS MULTIMONEDA</span>
+  <h1>Retira en la moneda que corresponde.</h1>
+  <p>Escribes el monto en la moneda de tu país, <b>{{ preferred_currency }}</b>. HBL lo convierte a la moneda base <b>{{ config.base_currency_code }}</b> para contabilidad y después a la moneda real del método de retiro.</p>
+</section>
+
+<section class="money-banner">
+  <div><small>Saldo disponible</small><strong>{% if preferred_balance != None %}{{ preferred_balance }} {{ preferred_currency }}{% else %}— {{ preferred_currency }}{% endif %}</strong><span>Saldo contable: {{ config.base_currency_symbol }} {{ request.user.saldo }} {{ config.base_currency_code }}</span></div>
+  <div><small>Mínimo global</small><strong>{% if withdrawal_min_preferred %}{{ withdrawal_min_preferred }} {{ preferred_currency }}{% else %}{{ config.base_currency_symbol }} {{ config.withdrawal_min }}{% endif %}</strong><span>{{ config.base_currency_symbol }} {{ config.withdrawal_min }} {{ config.base_currency_code }}</span></div>
+  <div><small>Tu país / moneda de retiro local</small><strong>{{ request.user.get_country_display }}</strong><span>{{ preferred_currency }} · zona {{ request.user.timezone_name|default:'UTC' }}</span></div>
+</section>
+
+{% if not withdraw_currency_ready %}
+<div class="currency-alert"><b>Retiros temporalmente no disponibles en {{ preferred_currency }}.</b> Administración debe activar una tasa válida para esta moneda antes de permitir conversiones.</div>
+{% endif %}
+
+<div class="method-strip" aria-label="Métodos de retiro disponibles">
+{% for method in withdrawal_methods %}
+  <div class="withdraw-method-chip">
+    <span>{{ method.icon|default:'↗' }}</span>
+    <div>
+      <b>{{ method.name }}</b>
+      <small>{% if method.currency_mode == 'user_local' %}Paga en tu moneda local{% else %}Paga en {{ method.currency }}{% endif %}{% if method.network %} · {{ method.network }}{% endif %}</small>
+    </div>
+  </div>
+{% empty %}<span class="muted">No hay métodos de retiro habilitados para tu país.</span>{% endfor %}
+</div>
+
+<div class="two-col withdrawal-layout">
+  <section class="panel glass-card">
+    <div class="panel-heading"><div class="panel-icon">↗</div><div><span class="eyebrow">NUEVA SOLICITUD</span><h2>Solicitar retiro</h2></div></div>
+    <form method="post" class="form-stack" id="withdraw-form" novalidate>
+      {% csrf_token %}<input type="hidden" name="action" value="withdraw">
+      {{ form.non_field_errors }}
+      {% for field in form %}
+      <div class="field-row">
+        <label for="{{ field.id_for_label }}" class="field-label"><span>{{ field.label }}</span>{% if field.field.required %}<span>Obligatorio</span>{% endif %}</label>
+        {{ field }}
+        {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+        {{ field.errors }}
+      </div>
+      {% endfor %}
+
+      <div class="withdraw-summary" id="withdraw-summary" aria-live="polite">
+        <div class="withdraw-summary-row"><span>Solicitas</span><b id="sum-requested">— {{ preferred_currency }}</b></div>
+        <div class="withdraw-summary-row"><span>Equivalente contable</span><b id="sum-base">— {{ config.base_currency_code }}</b></div>
+        <div class="withdraw-summary-row"><span>Comisión estimada</span><b id="sum-fee">— {{ config.base_currency_code }}</b></div>
+        <div class="withdraw-summary-row"><span>Mínimo de este método</span><b id="sum-minimum">—</b></div>
+        <div class="withdraw-summary-row net"><span>Recibirás aprox.</span><b id="sum-payout">—</b></div>
+        <small id="sum-note">Selecciona un destino y escribe el monto para ver la conversión antes de confirmar.</small>
+      </div>
+
+      <div class="form-policy"><b>Política de retiro.</b> El saldo se reserva al enviar la solicitud. El mínimo efectivo es el mayor entre el mínimo global y el del método. La tasa, comisión y monto a pagar quedan congelados al crear la solicitud.</div>
+      <button class="primary-btn glow-btn" type="submit" {% if not withdraw_currency_ready %}disabled{% endif %}>Confirmar solicitud de retiro</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="panel-heading"><div class="panel-icon">＋</div><div><span class="eyebrow">DESTINOS</span><h2>Agregar cuenta o wallet</h2></div></div>
+    <p class="muted">Solo aparecen métodos activos para tu país. El servidor valida el formato del dato antes de guardarlo.</p>
+    <form method="post" class="form-stack" id="account-form" novalidate>
+      {% csrf_token %}<input type="hidden" name="action" value="add_account">
+      {{ account_form.non_field_errors }}
+      <div class="field-row"><label class="field-label" for="{{ account_form.withdrawal_method.id_for_label }}"><span>{{ account_form.withdrawal_method.label }}</span><span>Obligatorio</span></label>{{ account_form.withdrawal_method }}{{ account_form.withdrawal_method.errors }}</div>
+      <div id="withdrawal-method-hint" class="method-hint" hidden></div>
+      <div class="field-row"><label class="field-label" for="{{ account_form.label.id_for_label }}"><span>{{ account_form.label.label }}</span><span>Ej. “Mi banco”</span></label>{{ account_form.label }}{{ account_form.label.errors }}</div>
+      <div class="field-row" id="holder-field-label"><label class="field-label" for="{{ account_form.holder_name.id_for_label }}"><span>{{ account_form.holder_name.label }}</span><span id="holder-required-text">Según método</span></label>{{ account_form.holder_name }}{{ account_form.holder_name.errors }}</div>
+      <div class="field-row" id="identifier-field-label"><label class="field-label" for="{{ account_form.identifier.id_for_label }}"><span id="identifier-label-text">{{ account_form.identifier.label }}</span><span>Se valida</span></label>{{ account_form.identifier }}<small id="identifier-help-text">Selecciona un método para ver el formato correcto.</small>{{ account_form.identifier.errors }}</div>
+      <label class="check-label">{{ account_form.is_default }} <span>{{ account_form.is_default.label }}</span></label>{{ account_form.is_default.errors }}
+      <div class="form-policy"><b>Seguridad.</b> Verifica banco, red y dirección antes de guardar. HBL nunca te pedirá una frase semilla, clave privada ni contraseña de Binance en este formulario.</div>
+      <button class="secondary-btn" type="submit">Guardar destino</button>
+    </form>
+  </section>
+</div>
+
+<section class="panel space-top">
+  <div class="section-head compact"><div><span class="eyebrow">HISTORIAL</span><h2>Retiros recientes</h2></div></div>
+  <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Método</th><th>Solicitado</th><th>Base / comisión</th><th>Pago final</th><th>Estado</th></tr></thead><tbody>
+  {% for item in withdrawals %}
+    <tr>
+      <td>{{ item.created_at|date:'d/m/Y H:i' }}</td>
+      <td><b>{{ item.payout_label }}</b>{% if item.payout_network %}<br><small>{{ item.payout_network }}</small>{% endif %}</td>
+      <td>{{ item.requested_amount|floatformat:2 }} {{ item.requested_currency }}</td>
+      <td>{{ item.base_currency }} {{ item.amount|floatformat:2 }}<br><small>Comisión {{ item.base_currency }} {{ item.fee|floatformat:2 }}</small></td>
+      <td><b>{{ item.payout_amount|floatformat:8 }} {{ item.payout_currency }}</b><br><small>Neto base {{ item.net_amount|floatformat:2 }}</small></td>
+      <td><span class="status {{ item.status }}">{{ item.get_status_display }}</span></td>
+    </tr>
+  {% empty %}<tr><td colspan="6">Todavía no tienes retiros.</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+
+{{ withdrawal_methods_data|json_script:"withdrawal-methods-json" }}
+{{ withdrawal_accounts_data|json_script:"withdrawal-accounts-json" }}
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const methodSelect = document.getElementById('id_withdrawal_method');
+  const identifier = document.getElementById('id_identifier');
+  const holder = document.getElementById('id_holder_name');
+  const identifierLabel = document.getElementById('identifier-label-text');
+  const identifierHelp = document.getElementById('identifier-help-text');
+  const holderRequired = document.getElementById('holder-required-text');
+  const hint = document.getElementById('withdrawal-method-hint');
+  const methodsNode = document.getElementById('withdrawal-methods-json');
+  const accountsNode = document.getElementById('withdrawal-accounts-json');
+  const methods = methodsNode ? JSON.parse(methodsNode.textContent || '[]') : [];
+  const accounts = accountsNode ? JSON.parse(accountsNode.textContent || '[]') : [];
+
+  const updateMethodFields = () => {
+    if (!methodSelect) return;
+    const item = methods.find(x => String(x.id) === methodSelect.value);
+    if (!item) { if (hint) hint.hidden = true; return; }
+    if (identifierLabel) identifierLabel.textContent = item.account_label || 'Cuenta / dirección / ID';
+    if (identifier) identifier.placeholder = item.identifier_placeholder || item.account_label || 'Ingresa el destino';
+    if (identifierHelp) identifierHelp.textContent = item.identifier_help || 'Escribe el dato exactamente como aparece en el proveedor.';
+    if (holder) holder.required = !!item.holder_required;
+    if (holderRequired) holderRequired.textContent = item.holder_required ? 'Obligatorio' : 'Opcional';
+    if (hint) {
+      hint.hidden = !(item.instructions || item.network || item.payout_currency);
+      hint.replaceChildren();
+      const strong = document.createElement('b'); strong.textContent = `${item.name} · pago en ${item.payout_currency}`; hint.appendChild(strong);
+      if (item.network) { const span = document.createElement('span'); span.textContent = `Red/proveedor: ${item.network}`; hint.appendChild(span); }
+      if (item.instructions) { const span = document.createElement('span'); span.textContent = item.instructions; hint.appendChild(span); }
+    }
+  };
+  methodSelect?.addEventListener('change', updateMethodFields); updateMethodFields();
+
+  const accountSelect = document.getElementById('id_payout_account');
+  const amountInput = document.getElementById('id_amount');
+  const preferredRate = Number('{{ preferred_rate|default:0 }}'.replace(',', '.'));
+  const preferredCurrency = '{{ preferred_currency|escapejs }}';
+  const baseCurrency = '{{ config.base_currency_code|escapejs }}';
+  const fmt = (n, max=2) => Number.isFinite(n) ? new Intl.NumberFormat(undefined,{minimumFractionDigits:2,maximumFractionDigits:max}).format(n) : '—';
+  const el = id => document.getElementById(id);
+  const preview = () => {
+    const account = accounts.find(x => String(x.id) === accountSelect?.value);
+    const requested = Number((amountInput?.value || '').replace(',', '.'));
+    if (!account || !Number.isFinite(requested) || requested <= 0 || !preferredRate) {
+      el('sum-requested').textContent = `— ${preferredCurrency}`;
+      el('sum-base').textContent = `— ${baseCurrency}`;
+      el('sum-fee').textContent = `— ${baseCurrency}`;
+      el('sum-minimum').textContent = '—';
+      el('sum-payout').textContent = '—';
+      return;
+    }
+    const base = requested * preferredRate;
+    const fee = (base * Number(account.fee_percent || 0) / 100) + Number(account.fee_fixed_base || 0);
+    const net = Math.max(0, base - fee);
+    const payoutRate = Number(account.payout_rate || 0);
+    const payout = payoutRate > 0 ? net / payoutRate : NaN;
+    const minBase = Number(account.effective_min_base || 0);
+    const minLocal = minBase / preferredRate;
+    el('sum-requested').textContent = `${fmt(requested)} ${preferredCurrency}`;
+    el('sum-base').textContent = `${fmt(base)} ${baseCurrency}`;
+    el('sum-fee').textContent = `${fmt(fee)} ${baseCurrency}`;
+    el('sum-minimum').textContent = `${fmt(minLocal)} ${preferredCurrency} (${fmt(minBase)} ${baseCurrency})`;
+    el('sum-payout').textContent = Number.isFinite(payout) ? `${fmt(payout,8)} ${account.payout_currency}` : 'Tasa no disponible';
+    const maximum = Number(account.max_base || 0);
+    let note = `${account.method}: la tasa y la comisión definitivas se validan otra vez en el servidor.`;
+    if (base < minBase) note = `El monto está por debajo del mínimo de ${fmt(minLocal)} ${preferredCurrency}.`;
+    else if (maximum > 0 && base > maximum) note = `El monto supera el máximo permitido para este método.`;
+    el('sum-note').textContent = note;
+  };
+  accountSelect?.addEventListener('change', preview);
+  amountInput?.addEventListener('input', preview);
+  preview();
+})();
+</script>
+{% endblock %}

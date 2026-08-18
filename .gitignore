@@ -1,0 +1,17 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.sqlite3
+db.sqlite3
+media/*
+!media/.gitkeep
+staticfiles/*
+!staticfiles/.gitkeep
+.DS_Store
+.idea/
+.vscode/
+.pytest_cache/
+coverage.xml
+htmlcov/

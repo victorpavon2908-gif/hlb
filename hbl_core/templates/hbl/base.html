@@ -1,0 +1,75 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#070a12">
+  <meta name="description" content="HBL Music Rewards">
+  <title>{% block title %}HBL{% endblock %}</title>
+  <link rel="manifest" href="{% static 'hbl/manifest.webmanifest' %}">
+  <link rel="icon" href="{% static 'hbl/img/icon-192.png' %}">
+  <link rel="stylesheet" href="{% static 'hbl/css/app.css' %}">
+  <script defer src="{% static 'hbl/js/app.js' %}"></script>
+  <script defer src="{% static 'hbl/js/pwa.js' %}"></script>
+  {% block head %}{% endblock %}
+</head>
+<body {% if user.is_authenticated %}data-timezone-url="{% url 'hbl_update_timezone' %}"{% endif %}>
+  <div class="ambient ambient-a"></div><div class="ambient ambient-b"></div><div class="noise-layer"></div>
+  <div class="app-shell">
+    {% if user.is_authenticated %}
+    <aside class="sidebar" aria-label="Navegación principal">
+      <a class="brand" href="{% url 'hbl_home' %}">
+        <img src="{% static 'hbl/img/logo.svg' %}" alt="HBL">
+        <span><strong>HBL</strong><small>Music Rewards</small></span>
+      </a>
+      <div class="sidebar-user">
+        <span class="avatar-dot">{{ user.first_name|default:'H'|first|upper }}</span>
+        <div class="sidebar-user__meta">
+          <b title="{{ user.first_name|default:user.primary_contact }}">{{ user.first_name|default:user.primary_contact }}</b>
+          <small title="{{ user.primary_contact }}">{{ user.primary_contact }}</small>
+        </div>
+      </div>
+      <nav>
+        <a href="{% url 'hbl_home' %}" class="nav-link">♫ <span>Escuchar</span></a>
+        <a href="{% url 'hbl_plans' %}" class="nav-link">◆ <span>Planes</span></a>
+        <a href="{% url 'hbl_wallet' %}" class="nav-link">◈ <span>Billetera</span></a>
+        <a href="{% url 'hbl_withdrawals' %}" class="nav-link">↗ <span>Retiros</span></a>
+        <a href="{% url 'hbl_wheel' %}" class="nav-link nav-special">✦ <span>Ruleta</span></a>
+        <a href="{% url 'hbl_gifts' %}" class="nav-link">🎁 <span>Códigos regalo</span></a>
+        <a href="{% url 'hbl_referrals' %}" class="nav-link">◎ <span>Referidos</span></a>
+        <a href="{% url 'hbl_profile' %}" class="nav-link">◉ <span>Perfil</span></a>
+        {% if user.is_staff %}<a href="{% url 'hbl_control_dashboard' %}" class="nav-link admin-link">⚙ <span>HBL Control</span></a>{% endif %}
+      </nav>
+      <form action="{% url 'hbl_logout' %}" method="post" class="logout-form">{% csrf_token %}<button class="ghost-btn" type="submit">Cerrar sesión</button></form>
+    </aside>
+    {% endif %}
+
+    <main class="main {% if not user.is_authenticated %}main-auth{% endif %}">
+      {% if user.is_authenticated %}
+      <header class="topbar">
+        <div><span class="eyebrow">HBL EXPERIENCE</span><strong>Hola, {{ user.first_name|default:'miembro' }}</strong></div>
+        <div class="topbar-actions">
+          <a class="mini-action" href="{% url 'hbl_gifts' %}" title="Código de regalo" aria-label="Código de regalo">🎁</a>
+          <a class="balance-pill" href="{% url 'hbl_wallet' %}"><small>Saldo</small><b>{{ platform_config.base_currency_symbol|default:'C$' }} {{ user.saldo|default:'0.00' }}</b></a>
+        </div>
+      </header>
+      {% endif %}
+      {% if messages %}<div class="messages">{% for message in messages %}<div class="toast {{ message.tags }}">{{ message }}</div>{% endfor %}</div>{% endif %}
+      {% block content %}{% endblock %}
+    </main>
+
+    {% if user.is_authenticated %}
+    <nav class="mobile-nav" aria-label="Navegación móvil">
+      <a href="{% url 'hbl_home' %}">♫<span>Inicio</span></a>
+      <a href="{% url 'hbl_wallet' %}">◈<span>Wallet</span></a>
+      <a href="{% url 'hbl_withdrawals' %}">↗<span>Retirar</span></a>
+      <a href="{% url 'hbl_wheel' %}" class="mobile-special">✦<span>Ruleta</span></a>
+      <a href="{% url 'hbl_referrals' %}">◎<span>Referidos</span></a>
+      <a href="{% url 'hbl_profile' %}">◉<span>Perfil</span></a>
+    </nav>
+    {% endif %}
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

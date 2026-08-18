@@ -1,0 +1,34 @@
+{% load static %}
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#070A13"><title>{% block title %}HBL Control{% endblock %}</title><link rel="stylesheet" href="{% static 'hbl/css/app.css' %}"><script defer src="{% static 'hbl/js/app.js' %}"></script></head>
+<body class="control-body"><div class="ambient ambient-a"></div><div class="ambient ambient-b"></div><div class="control-shell">
+<aside class="control-sidebar">
+  <a class="control-brand" href="{% url 'hbl_control_dashboard' %}"><img src="{% static 'hbl/img/logo.svg' %}" alt="HBL"><span><b>HBL CONTROL</b><small>Operations Center · v5</small></span></a>
+  <nav>
+    <small class="nav-section">OPERACIÓN</small>
+    <a href="{% url 'hbl_control_dashboard' %}">⌂ <span>Resumen</span></a>
+    <a href="{% url 'hbl_control_users' %}">◎ <span>Usuarios y bloqueos</span></a>
+    <a href="{% url 'hbl_control_memberships' %}">◫ <span>Membresías</span></a>
+    <small class="nav-section">CONTENIDO</small>
+    <a href="{% url 'hbl_control_plans' %}">◆ <span>Planes / niveles</span></a>
+    <a href="{% url 'hbl_control_tracks' %}">♫ <span>Canciones</span></a>
+    <a href="{% url 'hbl_control_wheel' %}">✦ <span>Ruleta y premios</span></a>
+    <a href="{% url 'hbl_control_gifts' %}">🎁 <span>Códigos regalo</span></a>
+    <small class="nav-section">DINERO</small>
+    <a href="{% url 'hbl_control_deposits' %}">↓ <span>Recargas</span></a>
+    <a href="{% url 'hbl_control_payment_methods' %}">◈ <span>Métodos de recarga</span></a>
+    <a href="{% url 'hbl_control_withdrawals' %}">↑ <span>Solicitudes de retiro</span></a>
+    <a href="{% url 'hbl_control_withdrawal_methods' %}">⇥ <span>Métodos de retiro</span></a>
+    <small class="nav-section">CRECIMIENTO</small>
+    <a href="{% url 'hbl_control_referrals' %}">⇄ <span>Referidos y salarios</span></a>
+    <small class="nav-section">SISTEMA</small>
+    <a href="{% url 'hbl_control_currency_rates' %}">¤ <span>Monedas y tasas</span></a>
+    <a href="{% url 'hbl_control_config' %}">⚙ <span>Configuración global</span></a>
+    <a href="{% url 'hbl_control_audit' %}">⌁ <span>Auditoría</span></a>
+  </nav>
+  <div class="control-sidebar-foot"><a href="{% url 'hbl_home' %}">← Ver plataforma</a><small>{{ request.user.primary_contact|default:request.user.username }}</small></div>
+</aside>
+<main class="control-main">
+<header class="control-topbar"><div><span class="eyebrow">HBL · ADMINISTRACIÓN</span><strong>{% block heading %}HBL Control{% endblock %}</strong></div><div class="control-top-actions"><a class="secondary-btn inline" href="{% url 'hbl_control_ledger_export' %}">Exportar ledger</a><a class="primary-btn inline" href="{% url 'hbl_control_user_create' %}">+ Usuario</a></div></header>
+{% if messages %}<div class="messages">{% for message in messages %}<div class="toast {{ message.tags }}">{{ message }}</div>{% endfor %}</div>{% endif %}
+{% block content %}{% endblock %}
+</main></div></body></html>

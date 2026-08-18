@@ -1,0 +1,20 @@
+{% extends 'hbl/base.html' %}
+{% block title %}Billetera · HBL{% endblock %}
+{% block content %}
+<section class="page-title compact-title"><span class="eyebrow">HBL WALLET</span><h1>Recarga con reglas claras.</h1><p>Depósito mínimo global: <b>US$ {{ config.minimum_deposit_usd }}</b> · equivalente actual {{ config.base_currency_symbol }} {{ minimum_deposit_nio }} {{ config.base_currency_code }}. El método elegido puede exigir un mínimo mayor, TXID o comprobante.</p></section>
+<div class="two-col wallet-grid">
+  <section class="panel glass-card">
+    <div class="panel-heading"><div class="panel-icon">↓</div><div><span class="eyebrow">NUEVA RECARGA</span><h2>Registrar depósito</h2></div></div>
+    <form method="post" enctype="multipart/form-data" class="form-stack" novalidate>{% csrf_token %}{{ form.non_field_errors }}
+      {% for field in form %}<div class="field-row"><label class="field-label" for="{{ field.id_for_label }}"><span>{{ field.label }}</span><span>{% if field.field.required %}Obligatorio{% else %}Según método{% endif %}</span></label>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}</div>{% endfor %}
+      <div class="form-policy"><b>Validación.</b> No reutilices un TXID. Si el método exige comprobante, sube una imagen legible y sin datos innecesarios. Los métodos automáticos solo acreditan saldo después de que el servidor confirma la operación con el proveedor.</div>
+      <button class="primary-btn glow-btn" type="submit">Continuar con la recarga</button>
+    </form>
+  </section>
+  <section class="panel"><div class="section-head compact"><div><span class="eyebrow">DISPONIBLES</span><h2>Métodos de recarga</h2></div></div>
+    {% for method in methods %}<div class="method-card rich-method"><div class="method-icon">◈</div><div><strong>{{ method.label }}</strong><span>{{ method.currency }}{% if method.network %} · {{ method.network }}{% endif %}</span><small>Mín. {{ method.min_amount }} {{ method.currency }}{% if method.max_amount > 0 %} · Máx. {{ method.max_amount }} {{ method.currency }}{% endif %}{% if method.require_txid %} · TXID requerido{% endif %}{% if method.require_proof %} · comprobante requerido{% endif %}</small>{% if method.destination %}<code>{{ method.destination }}</code>{% endif %}{% if method.instructions %}<p>{{ method.instructions }}</p>{% endif %}</div></div>{% empty %}<p class="muted">No hay métodos habilitados.</p>{% endfor %}
+    <div class="form-policy space-top"><b>Importante.</b> Nunca envíes fondos a un destino distinto del mostrado dentro de HBL. Administración puede activar o desactivar métodos sin cambiar el código.</div>
+  </section>
+</div>
+<section class="panel space-top"><div class="section-head compact"><div><span class="eyebrow">HISTORIAL</span><h2>Últimas recargas</h2></div></div><div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Método</th><th>Enviado</th><th>Saldo HBL</th><th>Estado</th></tr></thead><tbody>{% for dep in deposits %}<tr><td>{{ dep.submitted_at|date:'d/m/Y H:i' }}</td><td>{{ dep.payment_method.label }}</td><td>{{ dep.payment_amount }} {{ dep.payment_currency }}</td><td>{{ config.base_currency_symbol }} {{ dep.amount }} {{ config.base_currency_code }}</td><td><span class="status {{ dep.status }}">{{ dep.get_status_display }}</span></td></tr>{% empty %}<tr><td colspan="5">Sin recargas.</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}

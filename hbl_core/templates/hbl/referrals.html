@@ -1,0 +1,14 @@
+{% extends 'hbl/base.html' %}
+{% block title %}Referidos · HBL{% endblock %}
+{% block content %}
+<section class="page-title"><span class="eyebrow">COMUNIDAD</span><h1>Referidos y comisiones</h1><p>Gana <b>10%</b> sobre la primera recarga aprobada de cada referido y desbloquea beneficios: con <b>{{ platform_config.free_upgrade_referrals_required|default:5 }}</b> referidos calificados puedes optar a subir de plan sin inversión.</p></section>
+<div class="stats-grid">
+  <div class="stat-card"><small>Activos escuchando</small><strong>{{ active_referrals }}</strong></div>
+  <div class="stat-card"><small>Calificados con recarga</small><strong>{{ qualified_referrals }}</strong></div>
+  <div class="stat-card"><small>Nivel actual</small><strong>{% if tier %}{{ tier.name }}{% else %}Sin nivel{% endif %}</strong></div>
+</div>
+{% if upgrade_option %}<section class="panel space-top control-highlight"><h2>Beneficio listo</h2><p>Ya cumpliste la meta para subir de <b>{{ upgrade_option.membership.plan.name }}</b> a <b>{{ upgrade_option.next_plan.name }}</b> sin inversión adicional.</p><a class="primary-btn inline" href="{% url 'hbl_plans' %}">Ir a reclamar el upgrade</a></section>{% endif %}
+<section class="panel space-top"><h2>Tu enlace</h2>{% if referral_url %}<div class="copy-row"><input id="ref-link" readonly value="{{ referral_url }}"><button class="secondary-btn" type="button" data-copy="#ref-link">Copiar</button></div>{% else %}<p class="muted">Tu usuario no tiene código de invitación.</p>{% endif %}</section>
+<div class="two-col space-top"><section class="panel"><h2>Tu equipo</h2>{% for u in referred %}<div class="list-row"><span>{{ u.username }}<small>{{ u.date_joined|date:'d/m/Y' }} · {{ u.email|default:u.telefono }}</small></span></div>{% empty %}<p class="muted">Aún no tienes referidos.</p>{% endfor %}</section><section class="panel"><h2>Nómina</h2>{% for p in payrolls %}<div class="list-row"><span>Semana {{ p.week_start|date:'d/m/Y' }}<small>{{ p.active_referrals }} activos · {{ p.get_status_display }}</small></span><strong>{{ platform_config.base_currency_symbol|default:'C$' }} {{ p.amount }}</strong></div>{% empty %}<p class="muted">Aún no hay nóminas generadas.</p>{% endfor %}</section></div>
+<section class="panel space-top"><h2>Últimas comisiones</h2>{% for earning in earnings %}<div class="list-row"><span>{{ earning.referred.username }}<small>{{ earning.created_at|date:'d/m/Y H:i' }} · {{ earning.percent }}%</small></span><strong>{{ platform_config.base_currency_symbol|default:'C$' }} {{ earning.amount }}</strong></div>{% empty %}<p class="muted">Todavía no tienes comisiones por recargas.</p>{% endfor %}</section>
+{% endblock %}

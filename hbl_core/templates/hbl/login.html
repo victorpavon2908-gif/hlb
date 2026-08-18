@@ -1,0 +1,13 @@
+{% extends 'hbl/base.html' %}{% load static %}
+{% block title %}Entrar · HBL{% endblock %}
+{% block content %}
+<section class="auth-stage">
+  <div class="auth-showcase"><span class="eyebrow">HBL · GLOBAL MUSIC REWARDS</span><h1>Tu música.<br><span>Tu experiencia.</span></h1><p>Una plataforma internacional para completar tareas de escucha, administrar membresías, recompensas y promociones.</p><div class="auth-badges"><span>🌎 Global</span><span>🎧 Música</span><span>✦ Premios</span></div></div>
+  <section class="auth-card glass-card">
+    <img class="auth-logo" src="{% static 'hbl/img/logo.svg' %}" alt="HBL">
+    <span class="eyebrow">ACCESO SEGURO</span><h2>Bienvenido</h2><p>Ingresa con correo, teléfono internacional o usuario.</p>
+    <form method="post" class="form-stack" novalidate>{% csrf_token %}{{ form.non_field_errors }}{% for field in form %}<div class="field-row"><label class="field-label" for="{{ field.id_for_label }}"><span>{{ field.label }}</span><span>Obligatorio</span></label>{{ field }}{{ field.errors }}</div>{% endfor %}<div class="form-policy"><b>Seguridad.</b> Después de varios intentos fallidos HBL aplica una espera temporal. Nunca compartas tu contraseña, códigos 2FA ni claves de billeteras.</div><button class="primary-btn glow-btn" type="submit">Entrar a HBL</button></form>
+    <p class="muted center">¿Primera vez? <a href="{% url 'hbl_register' %}">Crear cuenta global</a></p>
+  </section>
+</section>
+{% endblock %}

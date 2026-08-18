@@ -1,0 +1,38 @@
+# HBL ULTRA 5 — Checklist de producción
+
+- [ ] Crear `.env` desde `.env.example` sin publicarlo.
+- [ ] Usar `DEBUG=False`.
+- [ ] Definir `SECRET_KEY` aleatoria de 32+ caracteres.
+- [ ] Configurar `ALLOWED_HOSTS` y `CSRF_TRUSTED_ORIGINS`.
+- [ ] Usar PostgreSQL administrado y backups.
+- [ ] Configurar storage persistente/S3-compatible para media.
+- [ ] Ejecutar `python manage.py migrate --noinput`.
+- [ ] Ejecutar `python manage.py collectstatic --noinput`.
+- [ ] Ejecutar `python manage.py check --deploy`.
+- [ ] Ejecutar `python manage.py test`.
+- [ ] Crear superusuario con contraseña fuerte.
+- [ ] Confirmar moneda base antes de recibir actividad financiera; después no cambiarla.
+- [ ] Cargar tasas reales en `/control/monedas/` para todas las monedas que se mostrarán/pagarán.
+- [ ] Confirmar depósito mínimo US$100.
+- [ ] Confirmar retiro mínimo 500 base.
+- [ ] Revisar métodos de recarga: moneda, red, mínimo, máximo, TXID/comprobante.
+- [ ] Revisar métodos de retiro: país, moneda local/fija, mínimo, máximo, comisión y validación.
+- [ ] Probar retiro local → base → moneda método con al menos 2 países y USDT.
+- [ ] Confirmar que solo la primera recarga aprobada paga 10% al referidor.
+- [ ] Probar upgrade 5 → 10 → 15 referidos sin reutilizar bloques.
+- [ ] Revisar ruleta: referidos requeridos, membresía, giros, stock, pesos y términos.
+- [ ] Revisar códigos regalo: fechas, cantidad total y límite por usuario.
+- [ ] Revisar planes: precio, recompensa diaria, canciones, días y exposición financiera.
+- [ ] Cargar suficientes canciones licenciadas para cada plan.
+- [ ] Confirmar 10 segundos globales o el valor operativo deseado.
+- [ ] Probar cambio de día/zona horaria con tareas no completadas y completadas.
+- [ ] Configurar Binance Pay solo mediante variables de entorno.
+- [ ] Configurar webhook HTTPS `/pagos/binance/webhook/`.
+- [ ] Probar Create Order, webhook firmado, Query Order y rechazo de monto/moneda incorrectos.
+- [ ] Programar `sync_binance_pay` si se desea conciliación periódica.
+- [ ] Programar `run_referral_payroll --pay` solo si usarás sueldo semanal.
+- [ ] Probar registro: email-only, phone-only y ambos en varios países.
+- [ ] Probar responsive en 360, 390, 768, 1024 y desktop.
+- [ ] Probar PWA/service worker/offline.
+- [ ] Sustituir audios demo y confirmar licencias/derechos.
+- [ ] Revisar términos, privacidad, protección al consumidor, pagos, promociones e impuestos por país.

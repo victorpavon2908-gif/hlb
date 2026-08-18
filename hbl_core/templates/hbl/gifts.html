@@ -1,0 +1,9 @@
+{% extends 'hbl/base.html' %}
+{% block title %}Regalos · HBL{% endblock %}
+{% block content %}
+<section class="page-title gift-title"><span class="eyebrow">🎁 HBL GIFTS</span><h1>¿Tienes un código?</h1><p>Los códigos pueden acreditar saldo o agregar días a tu membresía. Cada código tiene vigencia, límite global y límite por usuario definidos por administración.</p></section>
+<div class="two-col gift-grid">
+<section class="panel gift-redeem glass-card"><div class="gift-box">🎁</div><span class="eyebrow">CANJEAR</span><h2>Escribe tu código HBL</h2><form method="post" class="form-stack" novalidate>{% csrf_token %}{{ form.non_field_errors }}{% for field in form %}<div class="field-row"><label class="field-label" for="{{ field.id_for_label }}"><span>{{ field.label }}</span><span>Obligatorio</span></label>{{ field }}{{ field.errors }}</div>{% endfor %}<div class="form-policy"><b>Validación.</b> HBL comprueba vigencia, estado, límite total, límite por usuario y requisitos de membresía antes de aplicar el premio.</div><button class="primary-btn glow-btn">Aplicar regalo</button></form></section>
+<section class="panel"><span class="eyebrow">HISTORIAL</span><h2>Tus regalos</h2>{% for item in history %}<div class="list-row"><span><b>{{ item.gift.name }}</b><small>{{ item.gift.code }} · {{ item.created_at|date:'d/m/Y H:i' }}</small></span><strong>{% if item.reward_amount %}+ {{ platform_config.base_currency_symbol|default:"C$" }} {{ item.reward_amount }}{% else %}{{ item.gift.value|floatformat:0 }} días{% endif %}</strong></div>{% empty %}<div class="empty-state compact"><b>Aún no has canjeado códigos.</b><p>Cuando recibas uno, podrás usarlo aquí.</p></div>{% endfor %}</section>
+</div>
+{% endblock %}

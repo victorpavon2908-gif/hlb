@@ -1,0 +1,33 @@
+{% extends 'hbl/base.html' %}{% load static %}
+{% block title %}Crear cuenta · HBL{% endblock %}
+{% block content %}
+<section class="auth-stage register-stage">
+  <div class="auth-showcase">
+    <span class="eyebrow">REGISTRO INTERNACIONAL</span>
+    <h1>Una cuenta HBL,<br>desde cualquier país.</h1>
+    <p>Selecciona tu país y registra <b>correo, teléfono o ambos</b>. Tu país define inicialmente tu moneda local y el navegador registra tu zona horaria para renovar las tareas diarias correctamente.</p>
+    <div class="auth-badges"><span>249 países</span><span>📱 Teléfono</span><span>✉ Correo opcional</span><span>🌐 Moneda local</span></div>
+  </div>
+  <section class="auth-card wide glass-card">
+    <img class="auth-logo" src="{% static 'hbl/img/logo.svg' %}" alt="HBL">
+    <span class="eyebrow">NUEVA CUENTA</span><h2>Crea tu perfil</h2>
+    <form method="post" class="form-grid" novalidate>
+      {% csrf_token %}{{ form.non_field_errors }}
+      {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+      {% for field in form.visible_fields %}
+      <div class="field-row {% if field.name == 'accept_terms' %}full{% endif %}">
+        {% if field.name == 'accept_terms' %}
+          <label class="check-label" for="{{ field.id_for_label }}">{{ field }} <span>{{ field.label }}</span></label>
+        {% else %}
+          <label class="field-label" for="{{ field.id_for_label }}"><span>{{ field.label }}</span><span>{% if field.field.required %}Obligatorio{% else %}Opcional{% endif %}</span></label>{{ field }}
+        {% endif %}
+        {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}
+      </div>
+      {% endfor %}
+      <div class="form-policy full"><b>Antes de crear la cuenta.</b> Debes conservar al menos un medio de contacto válido. No compartas contraseñas, códigos 2FA, frases semilla ni claves privadas. El país y la moneda pueden ajustarse luego desde tu perfil.</div>
+      <button class="primary-btn glow-btn full" type="submit">Crear cuenta HBL</button>
+    </form>
+    <p class="muted center">Al continuar aceptas los <a href="{% url 'hbl_terms' %}" target="_blank" rel="noopener">términos y políticas del programa</a>. ¿Ya tienes cuenta? <a href="{% url 'hbl_login' %}">Iniciar sesión</a></p>
+  </section>
+</section>
+{% endblock %}

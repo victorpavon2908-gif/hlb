@@ -1,0 +1,18 @@
+{% extends 'hbl/base.html' %}
+{% block title %}Planes · HBL{% endblock %}
+{% block content %}
+<section class="page-title"><span class="eyebrow">NIVELES HBL</span><h1>Elige tu membresía.</h1><p>Cada nivel define precio, vigencia, 3+ canciones diarias y recompensa. La conversión actual es US$1 = {{ config.base_currency_symbol|default:'C$' }} {{ config.exchange_rate_usd_nio }}.</p></section>
+{% if active_membership %}<section class="active-plan-banner"><div><span class="eyebrow">PLAN ACTIVO</span><h2>{{ active_membership.plan.name }}</h2><p>{{ config.base_currency_symbol|default:'C$' }} {{ active_membership.daily_reward_snapshot }}/día · {{ active_membership.daily_tracks_snapshot }} canciones · vence {{ active_membership.ends_at|date:'d/m/Y H:i' }}</p></div><a class="primary-btn inline" href="{% url 'hbl_home' %}">Ir a escuchar</a></section>{% endif %}
+{% if upgrade_option %}
+<section class="panel space-top control-highlight">
+  <span class="eyebrow">SUBIDA SIN INVERSIÓN</span>
+  <h2>Ya puedes subir de nivel gratis</h2>
+  <p>Tienes {{ upgrade_option.qualified_referrals }} referido(s) calificados con recarga. Cumpliste la meta de {{ upgrade_option.required }} y puedes pasar de <b>{{ upgrade_option.membership.plan.name }}</b> a <b>{{ upgrade_option.next_plan.name }}</b> sin invertir saldo.</p>
+  <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claim_upgrade"><button class="primary-btn">Subir de plan gratis</button></form>
+</section>
+{% endif %}
+<div class="plan-grid">
+{% for item in plan_items %}{% with p=item.plan %}<article class="plan-card {% if p.featured %}featured{% endif %}"><div class="plan-top"><span class="eyebrow">{{ p.badge|default:'HBL' }}</span>{% if p.featured %}<span class="status paid">Recomendado</span>{% endif %}</div><h2>{{ p.icon }} {{ p.name }}</h2><div class="plan-price"><strong>US$ {{ p.price_usd }}</strong><span>≈ {{ config.base_currency_symbol|default:'C$' }} {{ item.cost_nio }}</span></div><p>{{ p.description|default:'Membresía de recompensas por tareas de escucha.' }}</p><div class="plan-metrics"><div><small>Diario</small><b>{{ config.base_currency_symbol|default:'C$' }} {{ p.daily_reward_nio }}</b></div><div><small>Canciones</small><b>{{ p.daily_tracks }}/día</b></div><div><small>Vigencia</small><b>{{ p.duration_days }} días</b></div><div><small>Ciclo proyectado</small><b>{{ config.base_currency_symbol|default:'C$' }} {{ p.projected_cycle_reward_nio }}</b></div></div><small class="muted">Equivalencia proyectada del ciclo: ≈ US$ {{ item.cycle_usd }} a la tasa actual.</small>{% if active_membership %}<button class="primary-btn" disabled>Ya tienes un plan activo</button>{% elif request.user.saldo >= item.cost_nio %}<form method="post">{% csrf_token %}<input type="hidden" name="plan_id" value="{{ p.id }}"><button class="primary-btn">Activar con saldo HBL</button></form>{% else %}<a class="primary-btn inline" href="{% url 'hbl_wallet' %}">Recargar para activar</a><small class="negative">Te faltan fondos para {{ config.base_currency_symbol|default:'C$' }} {{ item.cost_nio }}.</small>{% endif %}</article>{% endwith %}{% empty %}<div class="empty-state">No hay planes activos todavía.</div>{% endfor %}
+</div>
+<section class="panel space-top legal-panel"><h2>Transparencia del programa</h2><p>{{ config.legal_notice }}</p><p class="muted">El depósito mínimo es US$ {{ config.minimum_deposit_usd }} y el retiro mínimo global es {{ config.base_currency_symbol|default:'C$' }} {{ config.withdrawal_min }} o su equivalente. Cada membresía conserva la tasa usada al momento de activarse.</p></section>
+{% endblock %}

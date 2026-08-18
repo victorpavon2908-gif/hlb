@@ -1,0 +1,35 @@
+from django.urls import path
+
+from . import control_views as views
+
+urlpatterns = [
+    path("", views.dashboard, name="hbl_control_dashboard"),
+    path("usuarios/", views.users, name="hbl_control_users"),
+    path("usuarios/crear/", views.user_create, name="hbl_control_user_create"),
+    path("usuarios/<int:user_id>/", views.user_detail, name="hbl_control_user_detail"),
+    path("planes/", views.plans, name="hbl_control_plans"),
+    path("planes/<int:plan_id>/", views.plans, name="hbl_control_plan_edit"),
+    path("canciones/", views.tracks, name="hbl_control_tracks"),
+    path("canciones/<int:track_id>/", views.tracks, name="hbl_control_track_edit"),
+    path("membresias/", views.memberships, name="hbl_control_memberships"),
+    path("membresias/<int:membership_id>/cancelar/", views.membership_cancel, name="hbl_control_membership_cancel"),
+    path("recargas/", views.deposits, name="hbl_control_deposits"),
+    path("recargas/<uuid:deposit_id>/<str:action>/", views.deposit_action, name="hbl_control_deposit_action"),
+    path("retiros/", views.withdrawals, name="hbl_control_withdrawals"),
+    path("retiros/<uuid:withdrawal_id>/<str:action>/", views.withdrawal_action, name="hbl_control_withdrawal_action"),
+    path("metodos-retiro/", views.withdrawal_methods, name="hbl_control_withdrawal_methods"),
+    path("metodos-retiro/<int:method_id>/", views.withdrawal_methods, name="hbl_control_withdrawal_method_edit"),
+    path("metodos-pago/", views.payment_methods, name="hbl_control_payment_methods"),
+    path("metodos-pago/<int:method_id>/", views.payment_methods, name="hbl_control_payment_method_edit"),
+    path("referidos/", views.referrals, name="hbl_control_referrals"),
+    path("referidos/<int:tier_id>/", views.referrals, name="hbl_control_referral_edit"),
+    path("ruleta/", views.wheel, name="hbl_control_wheel"),
+    path("ruleta/premio/<int:prize_id>/", views.wheel, name="hbl_control_wheel_prize_edit"),
+    path("regalos/", views.gift_codes, name="hbl_control_gifts"),
+    path("regalos/<int:gift_id>/", views.gift_codes, name="hbl_control_gift_edit"),
+    path("monedas/", views.currency_rates, name="hbl_control_currency_rates"),
+    path("monedas/<int:rate_id>/", views.currency_rates, name="hbl_control_currency_rate_edit"),
+    path("configuracion/", views.config, name="hbl_control_config"),
+    path("auditoria/", views.audit, name="hbl_control_audit"),
+    path("exportar/ledger.csv", views.ledger_export, name="hbl_control_ledger_export"),
+]

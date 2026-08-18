@@ -1,0 +1,42 @@
+{% extends 'hbl/base.html' %}
+{% block title %}Perfil · HBL{% endblock %}
+{% block content %}
+<section class="profile-hero glass-card">
+  <div class="profile-avatar">{{ user.first_name|default:user.username|slice:':1'|upper }}</div>
+  <div class="profile-identity">
+    <span class="eyebrow">MI CUENTA</span>
+    <h1>{{ user.first_name|default:'Usuario' }}{% if user.last_name %} {{ user.last_name }}{% endif %}</h1>
+    <div class="profile-meta"><span>{{ user.primary_contact }}</span><span>{{ user.get_country_display }}</span><span>{{ user.preferred_currency }}</span></div>
+  </div>
+  <div class="invite-badge"><small>CÓDIGO DE INVITACIÓN</small><strong>{{ user.codigo_invitacion }}</strong><button type="button" class="copy-btn" data-copy-text="{{ user.codigo_invitacion }}">Copiar</button></div>
+</section>
+
+<div class="stats-grid">
+  <article class="stat-card"><small>Saldo base</small><strong>{{ config.base_currency_symbol }} {{ user.saldo }}</strong><span class="muted">≈ {{ preferred_balance }} {{ preferred_currency }} · US$ {{ usd_balance }}</span></article>
+  <article class="stat-card"><small>Plan</small><strong>{% if membership %}{{ membership.plan.name }}{% else %}Sin plan{% endif %}</strong><span class="muted">{% if membership %}Vence {{ membership.ends_at|date:'d/m/Y' }}{% else %}Activa uno en Planes{% endif %}</span></article>
+  <article class="stat-card"><small>Referidos</small><strong>{{ user.referidos.count }}</strong><span class="muted">Comisión solo por primera recarga aprobada</span></article>
+</div>
+
+<div class="two-col space-top">
+  <section class="panel">
+    <span class="eyebrow">PERFIL</span><h2>Datos de cuenta</h2>
+    <form method="post" class="form-stack" novalidate>{% csrf_token %}{{ form.non_field_errors }}
+      {% for field in form %}<div class="field-row"><label class="field-label" for="{{ field.id_for_label }}"><span>{{ field.label }}</span><span>{% if field.field.required %}Obligatorio{% else %}Opcional{% endif %}</span></label>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}</div>{% endfor %}
+      <div class="form-policy"><b>Moneda de visualización.</b> Tu saldo real se conserva en {{ config.base_currency_code }}; cambiar la moneda solo cambia equivalencias y el monto que escribes al solicitar un retiro.</div>
+      <button class="primary-btn">Guardar cambios</button>
+    </form>
+  </section>
+  <section class="panel">
+    <span class="eyebrow">SEGURIDAD Y CICLO DIARIO</span><h2>Tu acceso</h2>
+    <div class="detail-list">
+      <div><dt>Zona horaria</dt><dd>{{ user.timezone_name|default:'UTC' }}</dd></div>
+      <div><dt>Contacto principal</dt><dd>{{ user.primary_contact }}</dd></div>
+      <div><dt>Estado</dt><dd>{% if user.is_active %}<span class="status paid">Activo</span>{% else %}<span class="status rejected">Bloqueado</span>{% endif %}</dd></div>
+    </div>
+    <div class="form-policy space-top"><b>Renovación de música.</b> Las tareas se regeneran al iniciar un nuevo día (00:00) en tu zona horaria detectada. Las tareas vencidas no se trasladan al día siguiente.</div>
+    <p class="muted">Usa una contraseña exclusiva para HBL. Las operaciones de saldo, membresías, recargas y retiros se validan en el servidor.</p>
+    {% if user.is_staff %}<a class="primary-btn inline" href="{% url 'hbl_control_dashboard' %}">Abrir HBL Control</a><a class="secondary-btn inline space-top" href="/admin/">Admin técnico Django</a>{% endif %}
+    <form action="{% url 'hbl_logout' %}" method="post" class="space-top">{% csrf_token %}<button class="ghost-btn" type="submit">Cerrar sesión</button></form>
+  </section>
+</div>
+{% endblock %}

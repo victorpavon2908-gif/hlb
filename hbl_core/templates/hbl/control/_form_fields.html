@@ -1,0 +1,9 @@
+{% if form.non_field_errors %}<div class="form-policy form-policy--danger">{% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}</div>{% endif %}
+{% for field in form %}
+<div class="field-row {% if field.errors %}field-row--error{% endif %}">
+  <label class="field-label" for="{{ field.id_for_label }}"><b>{{ field.label }}</b><span>{% if field.field.required %}Obligatorio{% else %}Opcional{% endif %}</span></label>
+  {{ field }}
+  {% if field.help_text %}<small class="helptext">{{ field.help_text|safe }}</small>{% endif %}
+  {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+</div>
+{% endfor %}
