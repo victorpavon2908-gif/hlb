@@ -16,13 +16,27 @@ def env_list(name, default=''):
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'dev-only-change-me-before-production')
 DEBUG = env_bool('DEBUG', True)
-ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', '127.0.0.1,localhost')
-CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS', '')
-if not DEBUG and (SECRET_KEY == 'dev-only-change-me-before-production' or len(SECRET_KEY) < 32):
-    raise RuntimeError('En producción debes definir un SECRET_KEY fuerte (mínimo 32 caracteres).')
-if not DEBUG and not ALLOWED_HOSTS:
-    raise RuntimeError('En producción debes configurar ALLOWED_HOSTS.')
+ALLOWED_HOSTS = env_list(
+    'ALLOWED_HOSTS',
+    'hlb-e8cw.onrender.com,localhost,127.0.0.1'
+)
 
+CSRF_TRUSTED_ORIGINS = env_list(
+    'CSRF_TRUSTED_ORIGINS',
+    'https://hlb-e8cw.onrender.com'
+)
+if not DEBUG and (
+    SECRET_KEY == 'dev-only-change-me-before-production'
+    or len(SECRET_KEY) < 32
+):
+    raise RuntimeError(
+        'En producción debes definir un SECRET_KEY fuerte (mínimo 32 caracteres).'
+    )
+
+if not DEBUG and not ALLOWED_HOSTS:
+    raise RuntimeError(
+        'En producción debes configurar ALLOWED_HOSTS.'
+    )
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
