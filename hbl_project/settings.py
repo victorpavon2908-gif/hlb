@@ -188,35 +188,47 @@ TEMPLATES = [
 # BASE DE DATOS
 # =========================================================
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "",
-).strip()
+# =========================================================
+# BASE DE DATOS
+# =========================================================
+
+DB_NAME = os.getenv("DB_NAME", "").strip()
+DB_USER = os.getenv("DB_USER", "").strip()
+DB_PASSWORD = os.getenv("DB_PASSWORD", "").strip()
+DB_HOST = os.getenv("DB_HOST", "").strip()
+DB_PORT = os.getenv("DB_PORT", "5432").strip()
 
 
-if DATABASE_URL:
-
-    import dj_database_url
+# Si existen las variables PostgreSQL usamos PostgreSQL.
+if all([
+    DB_NAME,
+    DB_USER,
+    DB_PASSWORD,
+    DB_HOST,
+]):
 
     DATABASES = {
-        "default": dj_database_url.parse(
-            DATABASE_URL,
-            conn_max_age=600,
-            conn_health_checks=True,
-        )
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": DB_NAME,
+            "USER": DB_USER,
+            "PASSWORD": DB_PASSWORD,
+            "HOST": DB_HOST,
+            "PORT": DB_PORT,
+            "CONN_MAX_AGE": 600,
+            "CONN_HEALTH_CHECKS": True,
+        }
     }
 
 else:
 
-    # SQLite solamente para desarrollo local.
+    # SQLite únicamente para desarrollo local.
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
-
-
 # =========================================================
 # VALIDADORES DE CONTRASEÑA
 # =========================================================
