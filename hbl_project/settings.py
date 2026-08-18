@@ -17,9 +17,10 @@ def env_list(name, default=''):
 SECRET_KEY = os.getenv('SECRET_KEY', 'dev-only-change-me-before-production')
 DEBUG = env_bool('DEBUG', True)
 ALLOWED_HOSTS = env_list(
-    'ALLOWED_HOSTS',
-    'hlb-e8cw.onrender.com,localhost,127.0.0.1'
 )
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if RENDER_EXTERNAL_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
 CSRF_TRUSTED_ORIGINS = env_list(
     'CSRF_TRUSTED_ORIGINS',
