@@ -13,6 +13,7 @@ from hbl_core.payment_gateways import (
     verify_bep20_deposit,
     verify_trc20_deposit,
 )
+from hbl_core.tilopay import TilopayClient, TilopayError
 
 
 class PayPalValidationTests(SimpleTestCase):
@@ -49,6 +50,51 @@ class PayPalValidationTests(SimpleTestCase):
     def test_rejects_wrong_currency(self):
         with self.assertRaises(PaymentGatewayError):
             PayPalClient.validate_completed_order(self._order(currency="EUR"), deposit=self._deposit())
+
+
+class TilopayValidationTests(SimpleTestCase):
+    def _deposit(self):
+        return SimpleNamespace(
+            id="22222222-2222-2222-2222-222222222222",
+            payment_amount=Decimal("100.00"),
+            payment_currency="USD",
+            reference="LINK123",
+        )
+
+    def _detail(self, *, reference=None, amount="100.00", currency="USD", code="1"):
+        dep = self._deposit()
+        return {
+            "detail": {
+                "reference": reference or str(dep.id),
+                "amount": amount,
+                "currency": currency,
+                "client": "HBL Test",
+            },
+            "payments": [{
+                "id": "TILO-TX-1",
+                "code": code,
+            }],
+        }
+
+    def test_accepts_exact_approved_payment(self):
+        transaction_id = TilopayClient.validate_paid_detail(self._detail(), deposit=self._deposit())
+        self.assertEqual(transaction_id, "TILO-TX-1")
+
+    def test_rejects_wrong_reference(self):
+        with self.assertRaises(TilopayError):
+            TilopayClient.validate_paid_detail(self._detail(reference="OTHER"), deposit=self._deposit())
+
+    def test_rejects_wrong_amount(self):
+        with self.assertRaises(TilopayError):
+            TilopayClient.validate_paid_detail(self._detail(amount="99.99"), deposit=self._deposit())
+
+    def test_rejects_wrong_currency(self):
+        with self.assertRaises(TilopayError):
+            TilopayClient.validate_paid_detail(self._detail(currency="CRC"), deposit=self._deposit())
+
+    def test_rejects_unapproved_payment(self):
+        with self.assertRaises(TilopayError):
+            TilopayClient.validate_paid_detail(self._detail(code="0"), deposit=self._deposit())
 
 
 class TronValidationTests(SimpleTestCase):
