@@ -35,7 +35,7 @@
 
       <div class="form-policy">
         <b>Validación.</b>
-        No reutilices un TXID. Binance Pay y PayPal usan checkout del proveedor; HBL no recibe contraseñas ni datos de tarjeta.
+        Binance Pay, PayPal y Tilopay usan checkout del proveedor; HBL no recibe contraseñas, PAN ni CVV.
         En USDT TRC20/BEP20 el TXID se contrasta con token, wallet, monto y confirmaciones antes de acreditar.
       </div>
 
@@ -66,7 +66,7 @@
           {% if method.max_amount > 0 %} · Máx. {{ method.max_amount }} {{ method.currency }}{% endif %}
           {% if method.require_txid %} · TXID requerido{% endif %}
           {% if method.require_proof %} · comprobante requerido{% endif %}
-          {% if method.kind == 'binance_pay' or method.network|upper == 'PAYPAL' %} · checkout automático{% endif %}
+          {% if method.kind == 'binance_pay' or method.network|upper == 'PAYPAL' or method.network|upper == 'TILOPAY' %} · checkout automático{% endif %}
           {% if method.kind == 'usdt_trc20' or method.kind == 'usdt_bep20' %} · validación blockchain{% endif %}
         </small>
         {% if method.destination %}<code>{{ method.destination }}</code>{% endif %}
@@ -109,6 +109,12 @@
                 {% csrf_token %}
                 <button class="secondary-btn inline" type="submit">Verificar blockchain</button>
               </form>
+              {% elif dep.payment_method.network|upper == 'TILOPAY' %}
+                {% if dep.checkout_url %}<a class="secondary-btn inline" href="{{ dep.checkout_url }}" rel="noopener">Continuar pago</a>{% endif %}
+                <form method="post" action="{% url 'hbl_tilopay_verify' dep.id %}" style="display:inline-block">
+                  {% csrf_token %}
+                  <button class="secondary-btn inline" type="submit">Verificar Tilopay</button>
+                </form>
               {% elif dep.checkout_url %}
               <a class="secondary-btn inline" href="{{ dep.checkout_url }}" rel="noopener">Continuar pago</a>
               {% else %}
