@@ -1,0 +1,32 @@
+name: HBL payments CI
+
+on:
+  push:
+    branches:
+      - "feature/**"
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      DEBUG: "True"
+      SECRET_KEY: "ci-only-secret-key-that-is-long-enough-123456"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+      DATABASE_URL: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Django checks
+        run: python manage.py check
+      - name: Migration drift
+        run: python manage.py makemigrations --check --dry-run
+      - name: Full HBL regression suite
+        run: python manage.py test hbl_core
