@@ -1,5 +1,7 @@
 import os
+import sys
 from pathlib import Path
+from urllib.parse import parse_qsl, unquote, urlparse
 
 from dotenv import load_dotenv
 
@@ -10,13 +12,13 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Carga .env para desarrollo local.
-# En Render se usarán las variables configuradas en Environment.
+# Desarrollo local: carga .env si existe.
+# Render usa las variables configuradas en Environment.
 load_dotenv(BASE_DIR / ".env")
 
 
 # =========================================================
-# HELPERS DE VARIABLES DE ENTORNO
+# HELPERS
 # =========================================================
 
 def env_bool(name, default=False):
@@ -36,6 +38,92 @@ def env_list(name, default=""):
     ]
 
 
+def clean_host(value):
+    """
+    Permite que ALLOWED_HOSTS venga como:
+    hlb-e8cw.onrender.com
+    https://hlb-e8cw.onrender.com
+    """
+    value = value.strip()
+
+    if value in {"*", ""}:
+        return value
+
+    if "://" in value:
+        value = urlparse(value).netloc
+
+    return value.rstrip("/")
+
+
+def normalize_csrf_origin(value):
+    """
+    CSRF_TRUSTED_ORIGINS necesita esquema.
+    Si se recibe solo un hostname, en producción se asume HTTPS.
+    """
+    value = value.strip().rstrip("/")
+
+    if not value:
+        return ""
+
+    if value.startswith(("http://", "https://")):
+        return value
+
+    if value.startswith(("localhost", "127.0.0.1")):
+        return f"http://{value}"
+
+    return f"https://{value}"
+
+
+def postgres_config_from_url(database_url):
+    """
+    Convierte DATABASE_URL de Render a configuración DATABASES
+    sin necesitar dj-database-url.
+    """
+    parsed = urlparse(database_url)
+
+    if parsed.scheme not in {"postgres", "postgresql"}:
+        raise RuntimeError(
+            "DATABASE_URL debe usar postgresql:// o postgres://"
+        )
+
+    database_name = unquote(parsed.path.lstrip("/"))
+
+    if not database_name:
+        raise RuntimeError("DATABASE_URL no contiene nombre de base de datos.")
+
+    config = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": database_name,
+        "USER": unquote(parsed.username or ""),
+        "PASSWORD": unquote(parsed.password or ""),
+        "HOST": parsed.hostname or "",
+        "PORT": str(parsed.port or 5432),
+        "CONN_MAX_AGE": 600,
+        "CONN_HEALTH_CHECKS": True,
+    }
+
+    options = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    if options:
+        config["OPTIONS"] = options
+
+    return config
+
+
+# =========================================================
+# RENDER
+# =========================================================
+
+RENDER_EXTERNAL_HOSTNAME = os.getenv(
+    "RENDER_EXTERNAL_HOSTNAME",
+    "",
+).strip()
+
+IS_RENDER = bool(
+    os.getenv("RENDER", "").strip()
+    or RENDER_EXTERNAL_HOSTNAME
+)
+
+
 # =========================================================
 # SEGURIDAD GENERAL
 # =========================================================
@@ -43,27 +131,28 @@ def env_list(name, default=""):
 SECRET_KEY = os.getenv(
     "SECRET_KEY",
     "dev-only-change-me-before-production",
-)
+).strip()
 
-# En Render debes configurar DEBUG=False.
-# Para desarrollo local puedes usar DEBUG=True en tu archivo .env.
-DEBUG = env_bool("DEBUG", True)
+# Seguro por defecto.
+# En local usa DEBUG=True en tu .env.
+DEBUG = env_bool("DEBUG", False)
 
 
 # =========================================================
 # ALLOWED HOSTS
 # =========================================================
 
-ALLOWED_HOSTS = env_list(
-    "ALLOWED_HOSTS",
-    "localhost,127.0.0.1",
-)
+ALLOWED_HOSTS = [
+    clean_host(host)
+    for host in env_list(
+        "ALLOWED_HOSTS",
+        "localhost,127.0.0.1",
+    )
+]
 
-# Render crea automáticamente esta variable.
-RENDER_EXTERNAL_HOSTNAME = os.getenv(
-    "RENDER_EXTERNAL_HOSTNAME",
-    "",
-).strip()
+ALLOWED_HOSTS = [
+    host for host in ALLOWED_HOSTS if host
+]
 
 if (
     RENDER_EXTERNAL_HOSTNAME
@@ -76,12 +165,18 @@ if (
 # CSRF TRUSTED ORIGINS
 # =========================================================
 
-CSRF_TRUSTED_ORIGINS = env_list(
-    "CSRF_TRUSTED_ORIGINS",
-    "",
-)
+CSRF_TRUSTED_ORIGINS = [
+    normalize_csrf_origin(origin)
+    for origin in env_list(
+        "CSRF_TRUSTED_ORIGINS",
+        "",
+    )
+]
 
-# Agrega automáticamente el dominio HTTPS de Render.
+CSRF_TRUSTED_ORIGINS = [
+    origin for origin in CSRF_TRUSTED_ORIGINS if origin
+]
+
 if RENDER_EXTERNAL_HOSTNAME:
     render_origin = f"https://{RENDER_EXTERNAL_HOSTNAME}"
 
@@ -99,8 +194,8 @@ if not DEBUG:
         or len(SECRET_KEY) < 32
     ):
         raise RuntimeError(
-            "En producción debes definir un SECRET_KEY fuerte "
-            "(mínimo 32 caracteres)."
+            "En producción debes definir SECRET_KEY con al menos "
+            "32 caracteres."
         )
 
     if not ALLOWED_HOSTS:
@@ -134,7 +229,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
 
-    # WhiteNoise debe ir justo después de SecurityMiddleware.
+    # WhiteNoise inmediatamente después de SecurityMiddleware.
     "whitenoise.middleware.WhiteNoiseMiddleware",
 
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -176,7 +271,10 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
 
-                # Context processor propio
+                # Context processor del proyecto.
+                # Si el 500 continúa después de este settings.py,
+                # este archivo es uno de los primeros que debemos revisar:
+                # hbl_core/context_processors.py
                 "hbl_core.context_processors.platform",
             ],
         },
@@ -188,9 +286,10 @@ TEMPLATES = [
 # BASE DE DATOS
 # =========================================================
 
-# =========================================================
-# BASE DE DATOS
-# =========================================================
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "",
+).strip()
 
 DB_NAME = os.getenv("DB_NAME", "").strip()
 DB_USER = os.getenv("DB_USER", "").strip()
@@ -199,14 +298,19 @@ DB_HOST = os.getenv("DB_HOST", "").strip()
 DB_PORT = os.getenv("DB_PORT", "5432").strip()
 
 
-# Si existen las variables PostgreSQL usamos PostgreSQL.
-if all([
+# 1) Render / producción: DATABASE_URL tiene prioridad.
+if DATABASE_URL:
+    DATABASES = {
+        "default": postgres_config_from_url(DATABASE_URL)
+    }
+
+# 2) También soporta variables PostgreSQL separadas.
+elif all([
     DB_NAME,
     DB_USER,
     DB_PASSWORD,
     DB_HOST,
 ]):
-
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
@@ -220,15 +324,23 @@ if all([
         }
     }
 
-else:
-
-    # SQLite únicamente para desarrollo local.
+# 3) SQLite únicamente para desarrollo local.
+elif DEBUG and not IS_RENDER:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
+
+# Nunca caer silenciosamente en SQLite en Render.
+else:
+    raise RuntimeError(
+        "No hay base de datos de producción configurada. "
+        "Define DATABASE_URL o DB_NAME, DB_USER, DB_PASSWORD y DB_HOST."
+    )
+
+
 # =========================================================
 # VALIDADORES DE CONTRASEÑA
 # =========================================================
@@ -270,7 +382,7 @@ LANGUAGE_CODE = "es-ni"
 TIME_ZONE = os.getenv(
     "TIME_ZONE",
     "America/Managua",
-)
+).strip()
 
 USE_I18N = True
 USE_TZ = True
@@ -281,8 +393,16 @@ USE_TZ = True
 # =========================================================
 
 STATIC_URL = "/static/"
-
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Si existe una carpeta /static a nivel del proyecto, Django la incluye.
+PROJECT_STATIC_DIR = BASE_DIR / "static"
+
+STATICFILES_DIRS = (
+    [PROJECT_STATIC_DIR]
+    if PROJECT_STATIC_DIR.exists()
+    else []
+)
 
 
 # =========================================================
@@ -290,7 +410,6 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 # =========================================================
 
 MEDIA_URL = "/media/"
-
 MEDIA_ROOT = BASE_DIR / "media"
 
 SERVE_MEDIA = env_bool(
@@ -368,9 +487,8 @@ STORAGES = {
 }
 
 
-# Si hay bucket configurado, usa almacenamiento S3-compatible.
+# Si hay bucket configurado, utiliza almacenamiento S3-compatible.
 if AWS_STORAGE_BUCKET_NAME:
-
     STORAGES["default"] = {
         "BACKEND": "storages.backends.s3.S3Storage",
     }
@@ -427,12 +545,15 @@ BINANCE_PAY_SUPPORT_CURRENCY = os.getenv(
     "USDT",
 ).strip()
 
-BINANCE_WEBHOOK_MAX_AGE_SECONDS = int(
-    os.getenv(
-        "BINANCE_WEBHOOK_MAX_AGE_SECONDS",
-        "300",
+try:
+    BINANCE_WEBHOOK_MAX_AGE_SECONDS = int(
+        os.getenv(
+            "BINANCE_WEBHOOK_MAX_AGE_SECONDS",
+            "300",
+        )
     )
-)
+except (TypeError, ValueError):
+    BINANCE_WEBHOOK_MAX_AGE_SECONDS = 300
 
 
 # =========================================================
@@ -445,14 +566,13 @@ SECURE_PROXY_SSL_HEADER = (
     "https",
 )
 
-# Cookies seguras en producción.
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 
 SESSION_COOKIE_HTTPONLY = True
 
-# Se mantiene False porque player.js utiliza csrftoken
-# para peticiones POST mediante fetch().
+# Debe permanecer False si JavaScript necesita leer csrftoken
+# para enviarlo en X-CSRFToken.
 CSRF_COOKIE_HTTPONLY = False
 
 SESSION_COOKIE_SAMESITE = "Lax"
@@ -485,8 +605,7 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = (
     SECURE_HSTS_SECONDS > 0
 )
 
-# No es necesario enviar preload mientras uses
-# el dominio gratuito de Render.
+# No usamos preload en el dominio gratuito de Render.
 SECURE_HSTS_PRELOAD = False
 
 
@@ -497,9 +616,92 @@ SECURE_HSTS_PRELOAD = False
 EMAIL_BACKEND = os.getenv(
     "EMAIL_BACKEND",
     "django.core.mail.backends.console.EmailBackend",
-)
+).strip()
 
 DEFAULT_FROM_EMAIL = os.getenv(
     "DEFAULT_FROM_EMAIL",
     "HBL <no-reply@hbl.local>",
-)
+).strip()
+
+
+# =========================================================
+# LOGGING
+# =========================================================
+# Importante para que un error 500 muestre el traceback real
+# en Render -> Logs, manteniendo DEBUG=False.
+
+LOG_LEVEL = os.getenv(
+    "LOG_LEVEL",
+    "INFO",
+).strip().upper()
+
+APP_LOG_LEVEL = os.getenv(
+    "APP_LOG_LEVEL",
+    "INFO",
+).strip().upper()
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+
+    "formatters": {
+        "console": {
+            "format": (
+                "[{asctime}] {levelname} "
+                "{name}: {message}"
+            ),
+            "style": "{",
+        },
+    },
+
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+            "formatter": "console",
+        },
+    },
+
+    "root": {
+        "handlers": ["console"],
+        "level": LOG_LEVEL,
+    },
+
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+
+        "django.security": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+
+        "django.db.backends": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+
+        "accounts": {
+            "handlers": ["console"],
+            "level": APP_LOG_LEVEL,
+            "propagate": False,
+        },
+
+        "hbl_core": {
+            "handlers": ["console"],
+            "level": APP_LOG_LEVEL,
+            "propagate": False,
+        },
+    },
+}
