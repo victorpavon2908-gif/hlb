@@ -334,6 +334,7 @@ def listen_ping(request, session_id):
 @login_required
 @require_POST
 def listen_complete(request, session_id):
+
     try:
         session, credited = complete_listening(
             request.user.id,
@@ -356,32 +357,36 @@ def listen_complete(request, session_id):
         })
 
     except ListeningSession.DoesNotExist:
+
         return JsonResponse({
             "ok": False,
-            "error": "Sesión no encontrada.",
+            "error":
+                "Sesión de escucha no encontrada."
         }, status=404)
 
     except HBLError as exc:
+
         return JsonResponse({
             "ok": False,
-            "error": str(exc),
+            "error": str(exc)
         }, status=409)
 
-    except Exception:
+    except Exception as exc:
+
         logger.exception(
-            "ERROR AL COMPLETAR ESCUCHA "
-            "user=%s session=%s",
+            "ERROR COMPLETANDO ESCUCHA "
+            "user=%s session=%s error=%s",
             request.user.id,
             session_id,
+            str(exc),
         )
 
         return JsonResponse({
             "ok": False,
-            "error": (
+            "error":
                 "Ocurrió un error interno al validar "
                 "la canción. El error fue registrado "
                 "en el servidor."
-            ),
         }, status=500)
 
 @login_required

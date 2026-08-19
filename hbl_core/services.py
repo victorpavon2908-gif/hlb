@@ -324,79 +324,342 @@ def listening_heartbeat(user_id, session_id):
 
 @transaction.atomic
 def complete_listening(user_id, session_id):
-    session = (ListeningSession.objects.select_for_update().select_related("track", "assignment", "assignment__membership").get(pk=session_id, user_id=user_id))
+    """
+    Completa una sesión de escucha de forma segura.
+
+    IMPORTANTE:
+    No usamos select_related() junto con select_for_update()
+    sobre ListeningSession.assignment porque assignment es nullable
+    y PostgreSQL puede rechazar FOR UPDATE sobre un OUTER JOIN.
+    """
+
+    # ---------------------------------------------------------
+    # 1. Bloquear únicamente la fila de ListeningSession
+    # ---------------------------------------------------------
+    session = (
+        ListeningSession.objects
+        .select_for_update()
+        .get(
+            pk=session_id,
+            user_id=user_id,
+        )
+    )
+
+    # ---------------------------------------------------------
+    # 2. Si ya fue recompensada, no volver a procesarla
+    # ---------------------------------------------------------
     if session.status == ListeningSession.Status.REWARDED:
         return session, False
-    if session.status != ListeningSession.Status.STARTED or not session.assignment_id:
-        raise HBLError("Esta sesión ya no puede generar recompensa.")
-    assignment = DailyAssignment.objects.select_for_update().get(pk=session.assignment_id)
+
+    # ---------------------------------------------------------
+    # 3. Validar estado
+    # ---------------------------------------------------------
+    if session.status != ListeningSession.Status.STARTED:
+        raise HBLError(
+            "Esta sesión ya no puede generar recompensa."
+        )
+
+    if not session.assignment_id:
+        raise HBLError(
+            "La sesión no está asociada a una tarea válida."
+        )
+
+    # ---------------------------------------------------------
+    # 4. Obtener y bloquear la tarea por separado
+    # ---------------------------------------------------------
+    try:
+        assignment = (
+            DailyAssignment.objects
+            .select_for_update()
+            .select_related(
+                "track",
+                "membership",
+                "membership__plan",
+            )
+            .get(
+                pk=session.assignment_id,
+                user_id=user_id,
+            )
+        )
+
+    except DailyAssignment.DoesNotExist:
+        raise HBLError(
+            "La tarea asociada a esta escucha ya no existe."
+        )
+
+    # ---------------------------------------------------------
+    # 5. Validar que sesión y tarea tengan la misma canción
+    # ---------------------------------------------------------
+    if session.track_id != assignment.track_id:
+        raise HBLError(
+            "La canción de la sesión no coincide con la tarea."
+        )
+
+    # ---------------------------------------------------------
+    # 6. Si la tarea ya estaba completada
+    # ---------------------------------------------------------
     if assignment.completed_at:
         session.status = ListeningSession.Status.REWARDED
-        session.reward_amount = assignment.reward_amount
+        session.reward_amount = Decimal("0.00")
         session.rewarded_at = assignment.completed_at
-        session.save(update_fields=["status", "reward_amount", "rewarded_at"])
+
+        session.save(
+            update_fields=[
+                "status",
+                "reward_amount",
+                "rewarded_at",
+            ]
+        )
+
         return session, False
+
+    # ---------------------------------------------------------
+    # 7. Bloquear usuario
+    # ---------------------------------------------------------
     user_for_day = _locked_user(user_id)
-    if assignment.assignment_date != user_localdate(user_for_day):
-        raise HBLError("La tarea diaria ya venció. Las tareas se renuevan automáticamente al comenzar un nuevo día en tu zona horaria.")
-    global_required = int(PlatformConfig.get_solo().listen_verification_seconds or 10)
-    track_required = int(getattr(session.track, "min_listen_seconds", 0) or 0)
-    required_seconds = max(global_required, track_required)
-    elapsed_seconds = max(0, int((timezone.now() - session.started_at).total_seconds()))
-    if elapsed_seconds < required_seconds:
-        raise HBLError(f"Debes mantener la reproducción activa al menos {required_seconds} segundos.")
-    if session.verified_seconds < required_seconds:
-        remaining = max(1, required_seconds - session.verified_seconds)
-        raise HBLError(f"Faltan {remaining} segundos de escucha verificada.")
 
+    # ---------------------------------------------------------
+    # 8. Validar fecha local
+    # ---------------------------------------------------------
+    today = user_localdate(user_for_day)
+
+    if assignment.assignment_date != today:
+        raise HBLError(
+            "La tarea diaria ya venció. "
+            "Las tareas se renuevan automáticamente "
+            "al comenzar un nuevo día en tu zona horaria."
+        )
+
+    # ---------------------------------------------------------
+    # 9. Calcular segundos requeridos
+    # ---------------------------------------------------------
+    config = PlatformConfig.get_solo()
+
+    global_required = int(
+        config.listen_verification_seconds or 10
+    )
+
+    track_required = int(
+        getattr(
+            assignment.track,
+            "min_listen_seconds",
+            0,
+        ) or 0
+    )
+
+    required_seconds = max(
+        global_required,
+        track_required,
+    )
+
+    # ---------------------------------------------------------
+    # 10. Validar tiempo real desde que inició la sesión
+    # ---------------------------------------------------------
     now = timezone.now()
-    assignment.completed_at = now
-    assignment.save(update_fields=["completed_at"])
 
-    remaining = DailyAssignment.objects.filter(
-        user_id=user_id, membership_id=assignment.membership_id,
-        assignment_date=assignment.assignment_date, completed_at__isnull=True,
-    ).count()
+    elapsed_seconds = max(
+        0,
+        int(
+            (
+                now - session.started_at
+            ).total_seconds()
+        ),
+    )
+
+    if elapsed_seconds < required_seconds:
+        remaining_time = (
+            required_seconds - elapsed_seconds
+        )
+
+        raise HBLError(
+            f"Debes mantener la reproducción activa "
+            f"{remaining_time} segundos más."
+        )
+
+    # ---------------------------------------------------------
+    # 11. Validar segundos confirmados por heartbeat
+    # ---------------------------------------------------------
+    verified_seconds = int(
+        session.verified_seconds or 0
+    )
+
+    if verified_seconds < required_seconds:
+        remaining_verified = max(
+            1,
+            required_seconds - verified_seconds,
+        )
+
+        raise HBLError(
+            f"Faltan {remaining_verified} segundos "
+            f"de escucha verificada."
+        )
+
+    # ---------------------------------------------------------
+    # 12. Marcar esta canción como completada
+    # ---------------------------------------------------------
+    assignment.completed_at = now
+
+    assignment.save(
+        update_fields=[
+            "completed_at",
+        ]
+    )
+
+    # ---------------------------------------------------------
+    # 13. Ver cuántas canciones quedan pendientes
+    # ---------------------------------------------------------
+    remaining = (
+        DailyAssignment.objects
+        .filter(
+            user_id=user_id,
+            membership_id=assignment.membership_id,
+            assignment_date=assignment.assignment_date,
+            completed_at__isnull=True,
+        )
+        .count()
+    )
+
+    # La recompensa NO se acredita canción por canción.
     reward = Decimal("0.00")
     credited = False
 
+    # ---------------------------------------------------------
+    # 14. Solamente cuando completa TODA la playlist
+    # ---------------------------------------------------------
     if remaining == 0:
-        user = user_for_day
-        daily_reference = f"daily:{assignment.membership_id}:{assignment.assignment_date.isoformat()}"
-        prior = RewardLedger.objects.filter(
-            user_id=user_id, kind=RewardLedger.Kind.MEMBERSHIP_REWARD, reference=daily_reference
-        ).first()
+
+        daily_reference = (
+            f"daily:"
+            f"{assignment.membership_id}:"
+            f"{assignment.assignment_date.isoformat()}"
+        )
+
+        # -----------------------------------------------------
+        # Evitar doble recompensa
+        # -----------------------------------------------------
+        prior = (
+            RewardLedger.objects
+            .filter(
+                user_id=user_id,
+                kind=RewardLedger.Kind.MEMBERSHIP_REWARD,
+                reference=daily_reference,
+            )
+            .first()
+        )
+
         if prior:
-            reward = money(prior.amount)
+
+            # Ya había sido acreditada.
+            reward = money(
+                prior.amount
+            )
+
+            credited = False
+
         else:
-            reward = money(assignment.membership.daily_reward_snapshot)
-            config = PlatformConfig.get_solo()
+
+            reward = money(
+                assignment.membership.daily_reward_snapshot
+            )
+
+            # -------------------------------------------------
+            # Validar límite diario
+            # -------------------------------------------------
             if config.daily_listen_reward_cap > 0:
-                day_start, day_end = user_day_bounds(user, assignment.assignment_date)
-                earned = RewardLedger.objects.filter(
-                    user_id=user_id,
-                    kind__in=[RewardLedger.Kind.LISTEN, RewardLedger.Kind.MEMBERSHIP_REWARD],
-                    created_at__gte=day_start, created_at__lt=day_end,
-                ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-                if earned + reward > config.daily_listen_reward_cap:
-                    raise HBLError("La recompensa diaria supera el límite configurado por la plataforma.")
+
+                day_start, day_end = user_day_bounds(
+                    user_for_day,
+                    assignment.assignment_date,
+                )
+
+                earned = (
+                    RewardLedger.objects
+                    .filter(
+                        user_id=user_id,
+                        kind__in=[
+                            RewardLedger.Kind.LISTEN,
+                            RewardLedger.Kind.MEMBERSHIP_REWARD,
+                        ],
+                        created_at__gte=day_start,
+                        created_at__lt=day_end,
+                    )
+                    .aggregate(
+                        total=Sum("amount")
+                    )["total"]
+                    or Decimal("0")
+                )
+
+                if (
+                    Decimal(earned)
+                    + Decimal(reward)
+                    > Decimal(
+                        config.daily_listen_reward_cap
+                    )
+                ):
+                    raise HBLError(
+                        "La recompensa diaria supera "
+                        "el límite configurado por "
+                        "la plataforma."
+                    )
+
+            # -------------------------------------------------
+            # Acreditar saldo
+            # -------------------------------------------------
             _credit_locked(
-                user, reward, RewardLedger.Kind.MEMBERSHIP_REWARD, reference=daily_reference,
+                user_for_day,
+                reward,
+                RewardLedger.Kind.MEMBERSHIP_REWARD,
+                reference=daily_reference,
                 metadata={
-                    "membership_id": assignment.membership_id,
-                    "plan": assignment.membership.plan.name,
-                    "assignment_date": assignment.assignment_date.isoformat(),
-                    "tracks_required": assignment.membership.daily_tracks_snapshot,
+                    "membership_id":
+                        assignment.membership_id,
+
+                    "plan":
+                        assignment.membership.plan.name,
+
+                    "assignment_date":
+                        assignment
+                        .assignment_date
+                        .isoformat(),
+
+                    "tracks_required":
+                        assignment
+                        .membership
+                        .daily_tracks_snapshot,
                 },
             )
+
             credited = True
 
-    session.status = ListeningSession.Status.REWARDED
-    session.rewarded_at = now
-    session.reward_amount = reward if credited else Decimal("0.00")
-    session.save(update_fields=["status", "rewarded_at", "reward_amount"])
-    return session, credited
+    # ---------------------------------------------------------
+    # 15. Cerrar sesión de escucha
+    # ---------------------------------------------------------
+    session.status = (
+        ListeningSession.Status.REWARDED
+    )
 
+    session.rewarded_at = now
+
+    # Solo la última canción lleva el monto diario
+    # en la sesión que produjo la acreditación.
+    session.reward_amount = (
+        reward
+        if credited
+        else Decimal("0.00")
+    )
+
+    session.save(
+        update_fields=[
+            "status",
+            "rewarded_at",
+            "reward_amount",
+        ]
+    )
+
+    # ---------------------------------------------------------
+    # 16. Retornar
+    # ---------------------------------------------------------
+    return session, credited
 
 @transaction.atomic
 def approve_deposit(deposit_id, *, transaction_id="", notes=""):
