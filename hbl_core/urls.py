@@ -29,6 +29,10 @@ urlpatterns = [
     path("pagos/paypal/cancelar/", payment_views.paypal_cancel, name="hbl_paypal_cancel"),
     path("pagos/paypal/webhook/", payment_views.paypal_webhook, name="hbl_paypal_webhook"),
 
+    # Tilopay Hosted Payment Link
+    path("pagos/tilopay/retorno/", payment_views.tilopay_return, name="hbl_tilopay_return"),
+    path("pagos/tilopay/<uuid:deposit_id>/verificar/", payment_views.verify_tilopay, name="hbl_tilopay_verify"),
+
     # Verificación automática de depósitos USDT on-chain
     path("pagos/crypto/<uuid:deposit_id>/verificar/", payment_views.verify_crypto, name="hbl_crypto_verify"),
 
