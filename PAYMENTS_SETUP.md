@@ -105,11 +105,17 @@ seed_hbl
 seed_payment_gateways
 ```
 
-`seed_payment_gateways` crea o normaliza Binance Pay, PayPal, Tilopay, TRC20 y BEP20. Los métodos automáticos se activan según los flags y la configuración presente en Environment; no guarda secretos en la base de datos.
+`seed_payment_gateways` crea o normaliza Binance Pay, PayPal, Tilopay, TRC20 y BEP20. Un método automático solo queda activo si su flag está en `True` **y** tiene la configuración mínima requerida; no guarda secretos en la base de datos.
 
-## 8. Reconciliación de respaldo
+## 8. Reconciliación automática / respaldo
 
-Disponibles:
+Puedes reconciliar todos los proveedores con un solo comando:
+
+```bash
+python manage.py sync_all_payments --limit 100
+```
+
+También existen los comandos individuales:
 
 ```bash
 python manage.py sync_binance_pay --limit 100
@@ -118,7 +124,9 @@ python manage.py sync_tilopay_deposits --limit 100
 python manage.py sync_crypto_deposits --limit 100
 ```
 
-Los cuatro vuelven a consultar al proveedor/blockchain y terminan en `approve_deposit()`. La acreditación es idempotente: una recarga ya aprobada no vuelve a sumar saldo.
+Todos vuelven a consultar al proveedor/blockchain y terminan en `approve_deposit()`. La acreditación es idempotente: una recarga ya aprobada no vuelve a sumar saldo.
+
+Para TRC20/BEP20, si quieres que una transacción pendiente se acredite sin que el usuario vuelva a abrir HBL, programa `sync_all_payments` como tarea periódica del hosting. En Render puede ejecutarse como Cron Job y debe compartir las mismas variables `DATABASE_URL` y credenciales de pago del servicio web.
 
 ## 9. Seguridad obligatoria
 
