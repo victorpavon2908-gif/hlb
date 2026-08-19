@@ -29,4 +29,4 @@ jobs:
       - name: Migration drift
         run: python manage.py makemigrations --check --dry-run
       - name: Payment tests
-        run: python manage.py test hbl_core.tests_payments
+        run: python manage.py test hbl_core.tests_payments hbl_core.tests_payment_idempotency
