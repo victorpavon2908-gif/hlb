@@ -3,6 +3,7 @@ import json
 import secrets
 from decimal import Decimal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+import logging
 
 from django.conf import settings
 from django.contrib import messages
@@ -24,6 +25,7 @@ from .forms import DepositForm, GiftRedeemForm, LoginForm, PayoutAccountForm, Pr
 from .models import CurrencyRate, DailyAssignment, Deposit, GiftRedemption, ListeningSession, MembershipPlan, PaymentMethod, PlatformConfig, ReferralPayroll, RewardLedger, Track, WheelConfig, WheelPrize, WheelSpin, Withdrawal, WithdrawalMethod
 from .services import HBLError, active_referral_count, approve_deposit, claim_referral_upgrade, complete_listening, current_membership, currency_rate, display_money, eligible_referral_upgrade, ensure_daily_assignments, listening_heartbeat, plan_price_nio, purchase_plan, qualified_referral_count, redeem_gift_code, referral_tier_for_count, request_withdrawal, spin_wheel, start_listening, user_day_bounds, user_localdate
 
+logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
@@ -211,43 +213,176 @@ def plans(request):
 @login_required
 @require_POST
 def listen_start(request, assignment_id):
-    assignment = get_object_or_404(DailyAssignment.objects.select_related("track"), pk=assignment_id, user=request.user)
     try:
-        session, created = start_listening(
-            request.user, assignment, client_nonce=request.POST.get("nonce", ""), ip_hash=_client_ip_hash(request),
+        assignment = get_object_or_404(
+            DailyAssignment.objects.select_related(
+                "track",
+                "membership",
+            ),
+            pk=assignment_id,
+            user=request.user,
         )
+
+        session, created = start_listening(
+            request.user,
+            assignment,
+            client_nonce=request.POST.get("nonce", ""),
+            ip_hash=_client_ip_hash(request),
+        )
+
+        config = PlatformConfig.get_solo()
+
+        required_seconds = max(
+            int(config.listen_verification_seconds or 10),
+            int(
+                getattr(
+                    assignment.track,
+                    "min_listen_seconds",
+                    0,
+                )
+                or 0
+            ),
+        )
+
         return JsonResponse({
-            "ok": True, "session_id": str(session.id), "created": created,
-            "min_seconds": int(PlatformConfig.get_solo().listen_verification_seconds or 10), "reward": str(assignment.reward_amount),
+            "ok": True,
+            "session_id": str(session.id),
+            "created": created,
+            "min_seconds": required_seconds,
+            "reward": str(
+                assignment.reward_amount
+            ),
+            "ping_url": reverse(
+                "hbl_listen_ping",
+                args=[session.id],
+            ),
+            "complete_url": reverse(
+                "hbl_listen_complete",
+                args=[session.id],
+            ),
         })
+
     except HBLError as exc:
-        return JsonResponse({"ok": False, "error": str(exc)}, status=409)
+        return JsonResponse({
+            "ok": False,
+            "error": str(exc),
+        }, status=409)
+
+    except Exception:
+        logger.exception(
+            "Error inesperado iniciando escucha. "
+            "user=%s assignment=%s",
+            request.user.id,
+            assignment_id,
+        )
+
+        return JsonResponse({
+            "ok": False,
+            "error": (
+                "Ocurrió un error interno al iniciar "
+                "la escucha."
+            ),
+        }, status=500)
 
 
 @login_required
 @require_POST
 def listen_ping(request, session_id):
     try:
-        session, remaining = listening_heartbeat(request.user.id, session_id)
-        return JsonResponse({"ok": True, "verified_seconds": session.verified_seconds, "remaining": remaining})
+        session, remaining = listening_heartbeat(
+            request.user.id,
+            session_id,
+        )
+
+        return JsonResponse({
+            "ok": True,
+            "verified_seconds":
+                int(session.verified_seconds or 0),
+            "remaining":
+                int(remaining or 0),
+        })
+
     except ListeningSession.DoesNotExist:
-        return JsonResponse({"ok": False, "error": "Sesión no encontrada."}, status=404)
+        return JsonResponse({
+            "ok": False,
+            "error": "Sesión no encontrada.",
+        }, status=404)
+
     except HBLError as exc:
-        return JsonResponse({"ok": False, "error": str(exc)}, status=409)
+        return JsonResponse({
+            "ok": False,
+            "error": str(exc),
+        }, status=409)
+
+    except Exception:
+        logger.exception(
+            "Error inesperado verificando escucha. "
+            "user=%s session=%s",
+            request.user.id,
+            session_id,
+        )
+
+        return JsonResponse({
+            "ok": False,
+            "error": (
+                "Ocurrió un error interno verificando "
+                "la escucha."
+            ),
+        }, status=500)
 
 
 @login_required
 @require_POST
 def listen_complete(request, session_id):
     try:
-        session, credited = complete_listening(request.user.id, session_id)
-        request.user.refresh_from_db(fields=["saldo"])
-        return JsonResponse({"ok": True, "credited": credited, "reward": str(session.reward_amount), "balance": str(request.user.saldo)})
-    except ListeningSession.DoesNotExist:
-        return JsonResponse({"ok": False, "error": "Sesión no encontrada."}, status=404)
-    except HBLError as exc:
-        return JsonResponse({"ok": False, "error": str(exc)}, status=409)
+        session, credited = complete_listening(
+            request.user.id,
+            session_id,
+        )
 
+        request.user.refresh_from_db(
+            fields=["saldo"]
+        )
+
+        return JsonResponse({
+            "ok": True,
+            "credited": bool(credited),
+            "reward": str(
+                session.reward_amount or 0
+            ),
+            "balance": str(
+                request.user.saldo or 0
+            ),
+        })
+
+    except ListeningSession.DoesNotExist:
+        return JsonResponse({
+            "ok": False,
+            "error": "Sesión no encontrada.",
+        }, status=404)
+
+    except HBLError as exc:
+        return JsonResponse({
+            "ok": False,
+            "error": str(exc),
+        }, status=409)
+
+    except Exception:
+        logger.exception(
+            "ERROR AL COMPLETAR ESCUCHA "
+            "user=%s session=%s",
+            request.user.id,
+            session_id,
+        )
+
+        return JsonResponse({
+            "ok": False,
+            "error": (
+                "Ocurrió un error interno al validar "
+                "la canción. El error fue registrado "
+                "en el servidor."
+            ),
+        }, status=500)
 
 @login_required
 def wallet(request):

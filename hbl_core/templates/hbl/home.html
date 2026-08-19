@@ -2,60 +2,149 @@
 {% block title %}Inicio · HBL{% endblock %}
 {% block content %}
 {% if membership %}
-<section class="hero-panel ultra-hero" style="--plan-a:{{ membership.plan.accent_from }};--plan-b:{{ membership.plan.accent_to }}">
+<section class="hero-panel ultra-hero"
+  style="--plan-a:{{ membership.plan.accent_from }};--plan-b:{{ membership.plan.accent_to }}">
   <div class="hero-copy">
-    <div class="hero-labels"><span class="eyebrow">{{ membership.plan.icon }} {{ membership.plan.name }} · ACTIVO</span><span class="live-dot">MÚSICA EN VIVO</span><span class="success-chip">Verificación en {{ membership.plan.daily_tracks_snapshot }} tareas</span></div>
-    <h1>Escucha {{ config.listen_verification_seconds|default:10 }} segundos,<br><span>verifica tu tarea diaria.</span></h1>
-    <p>Completa tus {{ membership.daily_tracks_snapshot }} canciones diarias. Cada canción queda validada con {{ config.listen_verification_seconds|default:10 }} segundos de escucha efectiva y la recompensa diaria se acredita al completar la playlist completa.</p>
-    <div class="hero-actions"><a class="primary-btn inline" href="#today-tracks">Continuar escuchando</a><a class="secondary-btn inline" href="{% url 'hbl_referrals' %}">◎ Referidos</a><a class="secondary-btn inline" href="{% url 'hbl_wheel' %}">✦ Ruleta</a></div>
-    <div class="hero-labels"><span class="day-chip">Moneda base: {{ config.base_currency_code|default:'NIO' }}</span><span class="day-chip">Se renueva 00:00 · {{ request.user.timezone_name|default:'UTC' }}</span><span class="day-chip">Ruleta: {{ qualified_referrals }} referido(s) calificados</span></div>
+    <div class="hero-labels"><span class="eyebrow">{{ membership.plan.icon }} {{ membership.plan.name }} ·
+        ACTIVO</span><span class="live-dot">MÚSICA EN VIVO</span><span class="success-chip">Verificación en {{
+        membership.plan.daily_tracks_snapshot }} tareas</span></div>
+    <h1>Escucha {{ config.listen_verification_seconds|default:10 }} segundos,<br><span>verifica tu tarea diaria.</span>
+    </h1>
+    <p>Completa tus {{ membership.daily_tracks_snapshot }} canciones diarias. Cada canción queda validada con {{
+      config.listen_verification_seconds|default:10 }} segundos de escucha efectiva y la recompensa diaria se acredita
+      al completar la playlist completa.</p>
+    <div class="hero-actions"><a class="primary-btn inline" href="#today-tracks">Continuar escuchando</a><a
+        class="secondary-btn inline" href="{% url 'hbl_referrals' %}">◎ Referidos</a><a class="secondary-btn inline"
+        href="{% url 'hbl_wheel' %}">✦ Ruleta</a></div>
+    <div class="hero-labels"><span class="day-chip">Moneda base: {{ config.base_currency_code|default:'NIO'
+        }}</span><span class="day-chip">Se renueva 00:00 · {{ request.user.timezone_name|default:'UTC' }}</span><span
+        class="day-chip">Ruleta: {{ qualified_referrals }} referido(s) calificados</span></div>
   </div>
   <div class="hero-stat premium-stat">
     <small>PROGRESO DE HOY</small><strong>{{ completed_count }}/{{ membership.daily_tracks_snapshot }}</strong>
-    <div class="meter"><span style="width:{% widthratio completed_count membership.daily_tracks_snapshot 100 %}%"></span></div>
-    <div class="hero-stat-row"><span>Ganado hoy</span><b>{{ config.base_currency_symbol|default:'C$' }} {{ earned_today }}</b></div>
-    <div class="hero-stat-row"><span>Meta diaria</span><b>{{ config.base_currency_symbol|default:'C$' }} {{ membership.daily_reward_snapshot }}</b></div>
-    <small>≈ {{ preferred_daily_reward }} {{ preferred_currency }}/día · US$ {{ daily_reward_usd }} · vence {{ membership.ends_at|date:'d/m/Y' }}</small>
+    <div class="meter"><span
+        style="width:{% widthratio completed_count membership.daily_tracks_snapshot 100 %}%"></span></div>
+    <div class="hero-stat-row"><span>Ganado hoy</span><b>{{ config.base_currency_symbol|default:'C$' }} {{ earned_today
+        }}</b></div>
+    <div class="hero-stat-row"><span>Meta diaria</span><b>{{ config.base_currency_symbol|default:'C$' }} {{
+        membership.daily_reward_snapshot }}</b></div>
+    <small>≈ {{ preferred_daily_reward }} {{ preferred_currency }}/día · US$ {{ daily_reward_usd }} · vence {{
+      membership.ends_at|date:'d/m/Y' }}</small>
   </div>
 </section>
 
 <section class="quick-grid">
-  <a class="quick-card" href="{% url 'hbl_wallet' %}"><span>◈</span><div><small>Billetera</small><b>{{ config.base_currency_symbol|default:'C$' }} {{ request.user.saldo }}</b></div></a>
-  <a class="quick-card" href="{% url 'hbl_wheel' %}"><span>✦</span><div><small>Ruleta gratis</small><b>{{ wheel_spins_today }}/{{ wheel_config.spins_per_day }} usados</b></div></a>
-  <a class="quick-card" href="{% url 'hbl_gifts' %}"><span>🎁</span><div><small>Regalos</small><b>Canjear código</b></div></a>
-  <a class="quick-card" href="{% url 'hbl_referrals' %}"><span>◎</span><div><small>Referidos</small><b>{{ qualified_referrals }} con recarga</b></div></a>
+  <a class="quick-card" href="{% url 'hbl_wallet' %}"><span>◈</span>
+    <div><small>Billetera</small><b>{{ config.base_currency_symbol|default:'C$' }} {{ request.user.saldo }}</b></div>
+  </a>
+  <a class="quick-card" href="{% url 'hbl_wheel' %}"><span>✦</span>
+    <div><small>Ruleta gratis</small><b>{{ wheel_spins_today }}/{{ wheel_config.spins_per_day }} usados</b></div>
+  </a>
+  <a class="quick-card" href="{% url 'hbl_gifts' %}"><span>🎁</span>
+    <div><small>Regalos</small><b>Canjear código</b></div>
+  </a>
+  <a class="quick-card" href="{% url 'hbl_referrals' %}"><span>◎</span>
+    <div><small>Referidos</small><b>{{ qualified_referrals }} con recarga</b></div>
+  </a>
 </section>
 
-<section id="today-tracks" class="section-head"><div><span class="eyebrow">PLAYLIST DIARIA</span><h2>Tus {{ membership.daily_tracks_snapshot }} canciones</h2></div><span class="day-chip">{{ completed_count }} completadas</span></section>
-{% if assignment_error %}<div class="panel"><p class="negative">{{ assignment_error }}</p></div>{% endif %}
+<section id="today-tracks" class="section-head">
+  <div><span class="eyebrow">PLAYLIST DIARIA</span>
+    <h2>Tus {{ membership.daily_tracks_snapshot }} canciones</h2>
+  </div><span class="day-chip">{{ completed_count }} completadas</span>
+</section>
+{% if assignment_error %}<div class="panel">
+  <p class="negative">{{ assignment_error }}</p>
+</div>{% endif %}
 <div class="track-grid" id="track-grid">
-{% for assignment in assignments %}{% with track=assignment.track %}
-  <article class="track-card music-card {% if assignment.completed_at %}completed{% endif %}" data-track-id="{{ track.id }}" data-start-url="{% url 'hbl_listen_start' assignment.id %}" data-min="{{ assignment.required_listen_seconds|default:10 }}" data-symbol="{{ config.base_currency_symbol|default:'C$' }}">
-    <div class="cover">{% if track.cover_src %}<img src="{{ track.cover_src }}" alt="Portada de {{ track.title }}">{% else %}<span>♫</span>{% endif %}<i>{{ assignment.position }}</i></div>
-    <div class="track-meta"><small>{{ track.artist|default:'HBL Music' }}</small><h3>{{ track.title }}</h3><div class="chips"><span>{{ assignment.required_listen_seconds|default:10 }}s verificados</span>{% if assignment.completed_at %}<span class="success-chip">✓ Lista</span>{% else %}<span>Tarea {{ assignment.position }}/{{ membership.daily_tracks_snapshot }}</span>{% endif %}</div></div>
+  {% for assignment in assignments %}{% with track=assignment.track %}
+  <article class="track-card music-card {% if assignment.completed_at %}completed{% endif %}"
+    data-track-id="{{ track.id }}" data-start-url="{% url 'hbl_listen_start' assignment.id %}"
+    data-min="{{ assignment.required_listen_seconds|default:10 }}"
+    data-symbol="{{ config.base_currency_symbol|default:'C$' }}">
+    <div class="cover music-cover" aria-hidden="true">
+      <span class="music-cover-icon">♫</span>
+      <i>{{ assignment.position }}</i>
+    </div>
+    <div class="track-meta"><small>{{ track.artist|default:'HBL Music' }}</small>
+      <h3>{{ track.title }}</h3>
+      <div class="chips"><span>{{ assignment.required_listen_seconds|default:10 }}s verificados</span>{% if
+        assignment.completed_at %}<span class="success-chip">✓ Lista</span>{% else %}<span>Tarea {{ assignment.position
+          }}/{{ membership.daily_tracks_snapshot }}</span>{% endif %}</div>
+    </div>
     <audio preload="metadata" src="{{ track.playable_url }}"></audio>
-    {% if assignment.completed_at %}<button class="play-btn" type="button" disabled>✓</button>{% else %}<button class="play-btn" type="button">▶</button>{% endif %}
-    <div class="progress"><span {% if assignment.completed_at %}style="width:100%"{% endif %}></span></div><p class="player-status" aria-live="polite">{% if assignment.completed_at %}Completada{% else %}Escucha {{ assignment.required_listen_seconds|default:10 }} segundos para verificar{% endif %}</p>
+    {% if assignment.completed_at %}<button class="play-btn" type="button" disabled>✓</button>{% else %}<button
+      class="play-btn" type="button">▶</button>{% endif %}
+    <div class="progress"><span {% if assignment.completed_at %}style="width:100%" {% endif %}></span></div>
+    <p class="player-status" aria-live="polite">{% if assignment.completed_at %}Completada{% else %}Escucha {{
+      assignment.required_listen_seconds|default:10 }} segundos para verificar{% endif %}</p>
   </article>
-{% endwith %}{% empty %}<div class="empty-state"><strong>No hay tareas disponibles.</strong><p>{{ assignment_error|default:'El administrador debe cargar suficientes canciones para este nivel.' }}</p></div>{% endfor %}
+  {% endwith %}{% empty %}<div class="empty-state"><strong>No hay tareas disponibles.</strong>
+    <p>{{ assignment_error|default:'El administrador debe cargar suficientes canciones para este nivel.' }}</p>
+  </div>{% endfor %}
 </div>
-<div class="form-policy daily-policy"><b>Renovación diaria.</b> Tu playlist se crea por fecha local. Al comenzar un nuevo día en <b>{{ request.user.timezone_name|default:'UTC' }}</b>, las tareas anteriores vencen y HBL genera automáticamente las nuevas cuando vuelves a abrir el panel.</div>
+<div class="form-policy daily-policy"><b>Renovación diaria.</b> Tu playlist se crea por fecha local. Al comenzar un
+  nuevo día en <b>{{ request.user.timezone_name|default:'UTC' }}</b>, las tareas anteriores vencen y HBL genera
+  automáticamente las nuevas cuando vuelves a abrir el panel.</div>
 {% else %}
-<section class="hero-panel ultra-hero no-plan-hero"><div class="hero-copy"><span class="eyebrow">HBL MUSIC REWARDS</span><h1>Tu próxima experiencia<br><span>empieza aquí.</span></h1><p>Activa una membresía para recibir tu playlist diaria, verificar 3 canciones por día y acceder a promociones de música, ruleta por referidos y recompensas por comunidad.</p><div class="hero-actions"><a class="primary-btn inline glow-btn" href="{% url 'hbl_plans' %}">Explorar niveles</a><a class="secondary-btn inline" href="{% url 'hbl_wallet' %}">Recargar saldo</a></div></div><div class="hero-stat premium-stat"><small>SALDO DISPONIBLE</small><strong>{{ config.base_currency_symbol|default:'C$' }} {{ request.user.saldo }}</strong><span>≈ {{ preferred_balance }} {{ preferred_currency }} · US$ {{ usd_balance }}</span><small>Depósito mínimo global: US$ {{ config.minimum_deposit_usd }}</small></div></section>
-<section class="quick-grid"><a class="quick-card" href="{% url 'hbl_plans' %}"><span>◆</span><div><small>Niveles</small><b>Ver planes</b></div></a><a class="quick-card" href="{% url 'hbl_wallet' %}"><span>↓</span><div><small>Depósito mínimo</small><b>US$ {{ config.minimum_deposit_usd }}</b></div></a><a class="quick-card" href="{% url 'hbl_gifts' %}"><span>🎁</span><div><small>Tengo un código</small><b>Canjear</b></div></a><a class="quick-card" href="{% url 'hbl_referrals' %}"><span>◎</span><div><small>Referidos</small><b>10% primera recarga</b></div></a></section>
+<section class="hero-panel ultra-hero no-plan-hero">
+  <div class="hero-copy"><span class="eyebrow">HBL MUSIC REWARDS</span>
+    <h1>Tu próxima experiencia<br><span>empieza aquí.</span></h1>
+    <p>Activa una membresía para recibir tu playlist diaria, verificar 3 canciones por día y acceder a promociones de
+      música, ruleta por referidos y recompensas por comunidad.</p>
+    <div class="hero-actions"><a class="primary-btn inline glow-btn" href="{% url 'hbl_plans' %}">Explorar niveles</a><a
+        class="secondary-btn inline" href="{% url 'hbl_wallet' %}">Recargar saldo</a></div>
+  </div>
+  <div class="hero-stat premium-stat"><small>SALDO DISPONIBLE</small><strong>{{ config.base_currency_symbol|default:'C$'
+      }} {{ request.user.saldo }}</strong><span>≈ {{ preferred_balance }} {{ preferred_currency }} · US$ {{ usd_balance
+      }}</span><small>Depósito mínimo global: US$ {{ config.minimum_deposit_usd }}</small></div>
+</section>
+<section class="quick-grid"><a class="quick-card" href="{% url 'hbl_plans' %}"><span>◆</span>
+    <div><small>Niveles</small><b>Ver planes</b></div>
+  </a><a class="quick-card" href="{% url 'hbl_wallet' %}"><span>↓</span>
+    <div><small>Depósito mínimo</small><b>US$ {{ config.minimum_deposit_usd }}</b></div>
+  </a><a class="quick-card" href="{% url 'hbl_gifts' %}"><span>🎁</span>
+    <div><small>Tengo un código</small><b>Canjear</b></div>
+  </a><a class="quick-card" href="{% url 'hbl_referrals' %}"><span>◎</span>
+    <div><small>Referidos</small><b>10% primera recarga</b></div>
+  </a></section>
 {% endif %}
 
-<section class="section-head"><div><span class="eyebrow">SHOWCASE</span><h2>Momentos, géneros y campañas</h2></div></section>
+<section class="section-head">
+  <div><span class="eyebrow">SHOWCASE</span>
+    <h2>Momentos, géneros y campañas</h2>
+  </div>
+</section>
 <div class="promo-gallery">
-  <article class="promo-card"><img loading="lazy" src="{% static 'hbl/img/poster-hits.svg' %}" alt="Top Hits"><div><b>Top Hits</b><small>Éxitos y lanzamientos destacados.</small></div></article>
-  <article class="promo-card"><img loading="lazy" src="{% static 'hbl/img/poster-latino.svg' %}" alt="Latino"><div><b>Latino</b><small>Reggaetón, urbano y ritmos latinos.</small></div></article>
-  <article class="promo-card"><img loading="lazy" src="{% static 'hbl/img/poster-focus.svg' %}" alt="Focus"><div><b>Focus</b><small>Playlist para trabajar y concentrarte.</small></div></article>
-  <article class="promo-card"><img loading="lazy" src="{% static 'hbl/img/poster-night.svg' %}" alt="Night"><div><b>Night</b><small>Electrónica y energía nocturna.</small></div></article>
-  <article class="promo-card"><img loading="lazy" src="{% static 'hbl/img/poster-chill.svg' %}" alt="Chill"><div><b>Chill</b><small>Momentos tranquilos y sonidos suaves.</small></div></article>
-  <article class="promo-card"><img loading="lazy" src="{% static 'hbl/img/poster-classics.svg' %}" alt="Classics"><div><b>Classics</b><small>Favoritos que siempre regresan.</small></div></article>
+  <article class="promo-card"><img loading="lazy" src="{% static 'hbl/img/poster-hits.svg' %}" alt="Top Hits">
+    <div><b>Top Hits</b><small>Éxitos y lanzamientos destacados.</small></div>
+  </article>
+  <article class="promo-card"><img loading="lazy" src="{% static 'hbl/img/poster-latino.svg' %}" alt="Latino">
+    <div><b>Latino</b><small>Reggaetón, urbano y ritmos latinos.</small></div>
+  </article>
+  <article class="promo-card"><img loading="lazy" src="{% static 'hbl/img/poster-focus.svg' %}" alt="Focus">
+    <div><b>Focus</b><small>Playlist para trabajar y concentrarte.</small></div>
+  </article>
+  <article class="promo-card"><img loading="lazy" src="{% static 'hbl/img/poster-night.svg' %}" alt="Night">
+    <div><b>Night</b><small>Electrónica y energía nocturna.</small></div>
+  </article>
+  <article class="promo-card"><img loading="lazy" src="{% static 'hbl/img/poster-chill.svg' %}" alt="Chill">
+    <div><b>Chill</b><small>Momentos tranquilos y sonidos suaves.</small></div>
+  </article>
+  <article class="promo-card"><img loading="lazy" src="{% static 'hbl/img/poster-classics.svg' %}" alt="Classics">
+    <div><b>Classics</b><small>Favoritos que siempre regresan.</small></div>
+  </article>
 </div>
 
-<section class="section-head"><div><span class="eyebrow">ACTIVIDAD</span><h2>Últimos movimientos</h2></div></section>
-<div class="list-card glass-card">{% for item in recent %}<div class="list-row"><span>{{ item.get_kind_display }}<small>{{ item.created_at|date:'d/m/Y H:i' }}</small></span><strong class="{% if item.amount >= 0 %}positive{% else %}negative{% endif %}">{% if item.amount > 0 %}+{% endif %}{{ item.amount }}</strong></div>{% empty %}<p class="muted">Todavía no tienes movimientos.</p>{% endfor %}</div>
+<section class="section-head">
+  <div><span class="eyebrow">ACTIVIDAD</span>
+    <h2>Últimos movimientos</h2>
+  </div>
+</section>
+<div class="list-card glass-card">{% for item in recent %}<div class="list-row"><span>{{ item.get_kind_display
+      }}<small>{{ item.created_at|date:'d/m/Y H:i' }}</small></span><strong
+      class="{% if item.amount >= 0 %}positive{% else %}negative{% endif %}">{% if item.amount > 0 %}+{% endif %}{{
+      item.amount }}</strong></div>{% empty %}<p class="muted">Todavía no tienes movimientos.</p>{% endfor %}</div>
 {% endblock %}
-{% block scripts %}{% if membership %}<script defer src="{% static 'hbl/js/player.js' %}"></script>{% endif %}{% endblock %}
+{% block scripts %}{% if membership %}
+<script defer src="{% static 'hbl/js/player.js' %}"></script>{% endif %}{% endblock %}

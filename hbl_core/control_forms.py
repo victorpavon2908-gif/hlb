@@ -109,9 +109,18 @@ class TrackForm(ControlModelForm):
     class Meta:
         model = Track
         fields = [
-            "title", "artist", "slug", "cover", "cover_url", "audio", "audio_url",
-            "duration_seconds", "min_listen_seconds", "allowed_plans", "active", "featured",
-        ]
+    "title",
+    "artist",
+    "slug",
+    "audio",
+    "audio_url",
+    "duration_seconds",
+    "min_listen_seconds",
+    "allowed_plans",
+    "active",
+    "featured",
+]
+
         labels = {
             "duration_seconds": "Duración aproximada (segundos)",
             "min_listen_seconds": "Segundos mínimos de escucha",
