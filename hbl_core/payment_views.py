@@ -1,12 +1,14 @@
 """Vistas de recarga unificadas.
 
-Mantiene los métodos manuales existentes y agrega:
-- Binance Pay Merchant (checkout automático existente)
+Métodos automáticos:
+- Binance Pay Merchant
 - PayPal Checkout Orders v2
+- Tilopay Hosted Payment Link
 - USDT TRC20 con validación TronGrid
 - USDT BEP20 con validación JSON-RPC BSC
 
-El saldo siempre se acredita a través de services.approve_deposit().
+Los demás métodos siguen siendo administrables/manuales. Ninguna pasarela
+modifica el saldo directamente: toda acreditación pasa por approve_deposit().
 """
 import json
 import secrets
@@ -15,7 +17,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -28,6 +30,7 @@ from .forms import DepositForm
 from .models import CurrencyRate, Deposit, PaymentMethod, PlatformConfig, RewardLedger
 from .payment_gateways import PayPalClient, PaymentGatewayError, paypal_enabled, verify_crypto_deposit
 from .services import HBLError, approve_deposit, display_money
+from .tilopay import TilopayClient, TilopayError, tilopay_enabled
 
 
 def _merchant_trade_no():
@@ -53,6 +56,11 @@ def _tilopay_method(method):
 
 def _crypto_auto_method(method):
     return method.kind in {PaymentMethod.Kind.USDT_TRC20, PaymentMethod.Kind.USDT_BEP20}
+
+
+def _client_name(user):
+    name = user.get_full_name().strip()
+    return name or user.primary_contact or user.username
 
 
 def _create_local_deposit(*, request, method, payment_amount, rate, status=Deposit.Status.PENDING, **extra):
@@ -83,7 +91,6 @@ def wallet(request):
         method = form.cleaned_data["payment_method"]
         payment_amount = form.cleaned_data["payment_amount"]
         rate = _rate_for(method)
-        config = PlatformConfig.get_solo()
 
         if rate <= 0:
             form.add_error("payment_method", "Este método no tiene una tasa de conversión válida.")
@@ -161,6 +168,35 @@ def wallet(request):
                         deposit.save(update_fields=["status", "notes"])
                         form.add_error(None, "No se pudo crear la orden PayPal. Intenta de nuevo o usa otro método.")
 
+            elif _tilopay_method(method):
+                if not tilopay_enabled():
+                    form.add_error("payment_method", "Tilopay automático aún no está habilitado en el servidor.")
+                else:
+                    deposit = _create_local_deposit(
+                        request=request,
+                        method=method,
+                        payment_amount=payment_amount,
+                        rate=rate,
+                        status=Deposit.Status.PROCESSING,
+                    )
+                    try:
+                        base = request.build_absolute_uri("/").rstrip("/")
+                        callback = f"{base}{reverse('hbl_tilopay_return')}?deposit={deposit.id}"
+                        result = TilopayClient().create_payment_link(
+                            deposit=deposit,
+                            callback_url=callback,
+                            client_name=_client_name(request.user),
+                        )
+                        deposit.reference = result["id"]
+                        deposit.checkout_url = result["url"]
+                        deposit.save(update_fields=["reference", "checkout_url"])
+                        return redirect(deposit.checkout_url)
+                    except TilopayError as exc:
+                        deposit.status = Deposit.Status.PENDING
+                        deposit.notes = f"Error al crear checkout Tilopay: {exc}"
+                        deposit.save(update_fields=["status", "notes"])
+                        form.add_error(None, "No se pudo crear el checkout Tilopay. Intenta de nuevo o usa otro método.")
+
             elif _crypto_auto_method(method):
                 try:
                     deposit = _create_local_deposit(
@@ -188,27 +224,6 @@ def wallet(request):
                         deposit.notes = f"Pendiente de confirmación automática: {exc}"
                         deposit.save(update_fields=["notes"])
                         messages.info(request, "Recarga registrada. La blockchain todavía no cumple todas las confirmaciones; puedes verificarla nuevamente desde el historial.")
-                    return redirect("hbl_wallet")
-
-            elif _tilopay_method(method):
-                # No se procesan datos de tarjeta dentro de HBL. Hasta disponer de
-                # credenciales + contrato/API exacta de la cuenta Tilopay, el método
-                # permanece como registro manual y nunca se autoacredita.
-                try:
-                    _create_local_deposit(
-                        request=request,
-                        method=method,
-                        payment_amount=payment_amount,
-                        rate=rate,
-                        txid=form.cleaned_data.get("txid", ""),
-                        reference=form.cleaned_data.get("reference", ""),
-                        proof=form.cleaned_data.get("proof"),
-                        notes="Tilopay pendiente de checkout/API merchant. No autoacreditar sin confirmación del proveedor.",
-                    )
-                except IntegrityError:
-                    form.add_error("txid", "Ese TXID ya fue registrado anteriormente.")
-                else:
-                    messages.success(request, "Solicitud Tilopay registrada. La acreditación permanecerá pendiente hasta confirmar la integración merchant.")
                     return redirect("hbl_wallet")
 
             else:
@@ -268,7 +283,6 @@ def paypal_return(request):
         approve_deposit(deposit.id, transaction_id=capture_id, notes="Confirmado por PayPal Orders v2 capture")
         messages.success(request, "Pago confirmado por PayPal. Tu saldo fue actualizado.")
     except PaymentGatewayError as exc:
-        # Si el capture respondió ambiguo, consultar la orden antes de decidir.
         try:
             current = PayPalClient().get_order(order_id)
             capture_id = PayPalClient.validate_completed_order(current, deposit=deposit)
@@ -321,6 +335,65 @@ def paypal_webhook(request):
         return JsonResponse({"ok": True})
     except (json.JSONDecodeError, PaymentGatewayError, HBLError) as exc:
         return JsonResponse({"ok": False, "error": str(exc)[:180]}, status=400)
+
+
+@csrf_exempt
+def tilopay_return(request):
+    """Retorno de Tilopay. No confía en parámetros del navegador: reconsulta el link."""
+    deposit_id = (request.GET.get("deposit") or request.POST.get("deposit") or "").strip()
+    if not deposit_id:
+        return JsonResponse({"ok": False, "error": "deposit missing"}, status=400)
+    deposit = get_object_or_404(
+        Deposit.objects.select_related("payment_method"),
+        pk=deposit_id,
+        payment_method__network__istartswith="TILOPAY",
+    )
+    if deposit.status == Deposit.Status.APPROVED:
+        messages.info(request, "Ese pago Tilopay ya estaba acreditado.")
+        return redirect("hbl_wallet")
+    try:
+        client = TilopayClient()
+        detail = client.payment_link_detail(deposit.reference)
+        transaction_id = client.validate_paid_detail(detail, deposit=deposit)
+        approve_deposit(
+            deposit.id,
+            transaction_id=transaction_id,
+            notes="Confirmado por consulta server-side a Tilopay",
+        )
+        messages.success(request, "Pago confirmado por Tilopay. Tu saldo fue actualizado.")
+    except (TilopayError, HBLError) as exc:
+        deposit.notes = f"Tilopay pendiente/no confirmado: {exc}"
+        deposit.save(update_fields=["notes"])
+        messages.warning(request, "Tilopay todavía no confirma el pago. No se acreditó saldo.")
+    return redirect("hbl_wallet")
+
+
+@login_required
+@require_POST
+def verify_tilopay(request, deposit_id):
+    deposit = get_object_or_404(
+        Deposit.objects.select_related("payment_method"),
+        pk=deposit_id,
+        user=request.user,
+        payment_method__network__istartswith="TILOPAY",
+    )
+    if deposit.status == Deposit.Status.APPROVED:
+        messages.info(request, "Esta recarga ya estaba acreditada.")
+        return redirect("hbl_wallet")
+    if deposit.status not in {Deposit.Status.PENDING, Deposit.Status.PROCESSING}:
+        messages.error(request, "Esta recarga ya no puede verificarse.")
+        return redirect("hbl_wallet")
+    try:
+        client = TilopayClient()
+        detail = client.payment_link_detail(deposit.reference)
+        transaction_id = client.validate_paid_detail(detail, deposit=deposit)
+        approve_deposit(deposit.id, transaction_id=transaction_id, notes="Confirmado por consulta manual segura a Tilopay")
+        messages.success(request, "Tilopay confirmó el pago. Saldo acreditado.")
+    except (TilopayError, HBLError) as exc:
+        deposit.notes = f"Verificación Tilopay pendiente: {exc}"
+        deposit.save(update_fields=["notes"])
+        messages.warning(request, str(exc))
+    return redirect("hbl_wallet")
 
 
 @login_required
