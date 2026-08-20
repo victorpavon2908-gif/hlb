@@ -1,4 +1,4 @@
-"""Vistas de recarga USDT con validación automática en blockchain."""
+"""Vistas de recarga: TRC20/BEP20 automáticos y transferencia bancaria manual."""
 from decimal import Decimal
 
 from django.contrib import messages
@@ -18,14 +18,14 @@ CRYPTO_KINDS = [
     PaymentMethod.Kind.USDT_TRC20,
     PaymentMethod.Kind.USDT_BEP20,
 ]
+ALLOWED_KINDS = CRYPTO_KINDS + [PaymentMethod.Kind.BANK]
 
 
-def _crypto_methods():
-    """Únicamente USDT TRC20 y BEP20 pueden aparecer como recarga."""
+def _payment_methods():
+    """Solo los tres métodos permitidos pueden aparecer en la app."""
     return (
         PaymentMethod.objects
-        .filter(active=True, kind__in=CRYPTO_KINDS)
-        .exclude(destination="")
+        .filter(active=True, kind__in=ALLOWED_KINDS)
         .order_by("sort_order", "label")
     )
 
@@ -48,7 +48,7 @@ def _deposit_message(request, deposit):
     elif deposit.status == Deposit.Status.PROCESSING:
         messages.info(
             request,
-            "TXID recibido. HBL está esperando confirmaciones/finalidad de la blockchain; esta pantalla lo volverá a comprobar automáticamente.",
+            "TXID recibido. HBL está esperando confirmaciones/finalidad de la blockchain.",
         )
     else:
         messages.warning(
@@ -60,8 +60,10 @@ def _deposit_message(request, deposit):
 @login_required
 def wallet(request):
     form = DepositForm(request.POST or None, request.FILES or None)
-    crypto_methods = _crypto_methods()
-    form.fields["payment_method"].queryset = crypto_methods
+    methods = _payment_methods()
+    form.fields["payment_method"].queryset = methods
+    form.fields["txid"].label = "TXID (obligatorio para TRC20/BEP20)"
+    form.fields["proof"].label = "Comprobante (obligatorio para transferencia bancaria)"
 
     if request.method == "POST" and form.is_valid():
         method = form.cleaned_data["payment_method"]
@@ -69,16 +71,44 @@ def wallet(request):
         rate = _rate_for(method)
         config = PlatformConfig.get_solo()
 
-        if method.kind not in CRYPTO_KINDS:
-            form.add_error("payment_method", "Solo se permiten depósitos USDT por TRC20 o BEP20.")
-        elif not method.destination:
+        if method.kind not in ALLOWED_KINDS:
+            form.add_error("payment_method", "Este método de pago no está permitido.")
+        elif method.kind in CRYPTO_KINDS and not method.destination:
             form.add_error("payment_method", "La dirección receptora de esta red no está configurada.")
+        elif method.kind == PaymentMethod.Kind.BANK and not method.destination:
+            form.add_error(
+                "payment_method",
+                "La cuenta bancaria todavía no está configurada. Administración debe agregar el destino antes de recibir transferencias.",
+            )
         elif rate <= 0:
             form.add_error("payment_method", "Este método no tiene una tasa de conversión válida.")
         else:
             credit_amount = (Decimal(payment_amount) * rate).quantize(Decimal("0.01"))
             if credit_amount <= 0:
                 form.add_error("payment_amount", "El monto convertido debe ser mayor que cero.")
+            elif method.kind == PaymentMethod.Kind.BANK:
+                try:
+                    Deposit.objects.create(
+                        user=request.user,
+                        payment_method=method,
+                        amount=credit_amount,
+                        currency=config.base_currency_code.upper(),
+                        payment_amount=payment_amount,
+                        payment_currency=(method.currency or config.base_currency_code).upper(),
+                        balance_rate=rate,
+                        status=Deposit.Status.PENDING,
+                        reference=form.cleaned_data.get("reference", ""),
+                        proof=form.cleaned_data.get("proof"),
+                        notes="Transferencia bancaria pendiente de revisión administrativa.",
+                    )
+                except IntegrityError:
+                    form.add_error(None, "No fue posible registrar la transferencia. Intenta nuevamente.")
+                else:
+                    messages.success(
+                        request,
+                        "Transferencia bancaria registrada. Administración revisará el comprobante antes de acreditar el saldo.",
+                    )
+                    return redirect("hbl_wallet")
             else:
                 try:
                     deposit = Deposit.objects.create(
@@ -98,8 +128,6 @@ def wallet(request):
                 except IntegrityError:
                     form.add_error("txid", "Ese TXID ya fue registrado anteriormente.")
                 else:
-                    # El signal post_save inicia la validación al crear la fila. Refrescamos
-                    # el resultado para informar si ya aprobó o si aún espera confirmaciones.
                     deposit.refresh_from_db()
                     _deposit_message(request, deposit)
                     return redirect("hbl_wallet")
@@ -120,7 +148,7 @@ def wallet(request):
 
     return render(request, "hbl/wallet.html", {
         "form": form,
-        "methods": crypto_methods,
+        "methods": methods,
         "deposits": deposits,
         "ledger": ledger,
         "config": config,
@@ -132,7 +160,7 @@ def wallet(request):
 @login_required
 @require_POST
 def recheck_crypto_deposits(request):
-    """Reintenta las recargas del usuario que aún esperan confirmaciones."""
+    """Reintenta únicamente recargas cripto que aún esperan confirmaciones."""
     pending_ids = list(
         Deposit.objects.filter(
             user=request.user,
