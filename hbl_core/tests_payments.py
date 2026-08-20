@@ -1,165 +1,124 @@
-import os
 from decimal import Decimal
-from types import SimpleNamespace
-from unittest.mock import patch
+from io import BytesIO
 
-from django.test import SimpleTestCase
+from PIL import Image
+from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
+from django.urls import reverse
 
-from hbl_core.models import PaymentMethod
-from hbl_core.payment_gateways import (
-    PayPalClient,
-    PaymentGatewayError,
-    _TRANSFER_TOPIC,
-    verify_bep20_deposit,
-    verify_trc20_deposit,
+from hbl_core.models import CurrencyRate, Deposit, PaymentMethod, PlatformConfig
+
+
+User = get_user_model()
+
+
+@override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
 )
-from hbl_core.tilopay import TilopayClient, TilopayError
+class ManualDepositTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="manual-user", password="Testpass123!")
+        self.client.force_login(self.user)
 
+        config = PlatformConfig.get_solo()
+        config.minimum_deposit_usd = Decimal("1.00")
+        config.save(update_fields=["minimum_deposit_usd"])
 
-class PayPalValidationTests(SimpleTestCase):
-    def _deposit(self):
-        return SimpleNamespace(
-            id="11111111-1111-1111-1111-111111111111",
-            payment_amount=Decimal("100.00"),
-            payment_currency="USD",
-        )
-
-    def _order(self, value="100.00", currency="USD"):
-        dep = self._deposit()
-        return {
-            "status": "COMPLETED",
-            "purchase_units": [{
-                "reference_id": str(dep.id),
-                "custom_id": str(dep.id),
-                "payments": {"captures": [{
-                    "id": "CAPTURE123",
-                    "status": "COMPLETED",
-                    "amount": {"currency_code": currency, "value": value},
-                }]},
-            }],
-        }
-
-    def test_accepts_exact_completed_order(self):
-        capture_id = PayPalClient.validate_completed_order(self._order(), deposit=self._deposit())
-        self.assertEqual(capture_id, "CAPTURE123")
-
-    def test_rejects_wrong_amount(self):
-        with self.assertRaises(PaymentGatewayError):
-            PayPalClient.validate_completed_order(self._order(value="99.00"), deposit=self._deposit())
-
-    def test_rejects_wrong_currency(self):
-        with self.assertRaises(PaymentGatewayError):
-            PayPalClient.validate_completed_order(self._order(currency="EUR"), deposit=self._deposit())
-
-
-class TilopayValidationTests(SimpleTestCase):
-    def _deposit(self):
-        return SimpleNamespace(
-            id="22222222-2222-2222-2222-222222222222",
-            payment_amount=Decimal("100.00"),
-            payment_currency="USD",
-            reference="LINK123",
-        )
-
-    def _detail(self, *, reference=None, amount="100.00", currency="USD", code="1"):
-        dep = self._deposit()
-        return {
-            "detail": {
-                "reference": reference or str(dep.id),
-                "amount": amount,
-                "currency": currency,
-                "client": "HBL Test",
+        CurrencyRate.objects.update_or_create(
+            code="USD",
+            defaults={
+                "name": "US Dollar",
+                "symbol": "$",
+                "rate_to_base": Decimal("36.6200"),
+                "active": True,
             },
-            "payments": [{
-                "id": "TILO-TX-1",
-                "code": code,
-            }],
-        }
-
-    def test_accepts_exact_approved_payment(self):
-        transaction_id = TilopayClient.validate_paid_detail(self._detail(), deposit=self._deposit())
-        self.assertEqual(transaction_id, "TILO-TX-1")
-
-    def test_rejects_wrong_reference(self):
-        with self.assertRaises(TilopayError):
-            TilopayClient.validate_paid_detail(self._detail(reference="OTHER"), deposit=self._deposit())
-
-    def test_rejects_wrong_amount(self):
-        with self.assertRaises(TilopayError):
-            TilopayClient.validate_paid_detail(self._detail(amount="99.99"), deposit=self._deposit())
-
-    def test_rejects_wrong_currency(self):
-        with self.assertRaises(TilopayError):
-            TilopayClient.validate_paid_detail(self._detail(currency="CRC"), deposit=self._deposit())
-
-    def test_rejects_unapproved_payment(self):
-        with self.assertRaises(TilopayError):
-            TilopayClient.validate_paid_detail(self._detail(code="0"), deposit=self._deposit())
-
-
-class TronValidationTests(SimpleTestCase):
-    @patch.dict(os.environ, {
-        "USDT_TRC20_CONTRACT": "TUSDTCONTRACTADDRESS",
-        "USDT_TRC20_DECIMALS": "6",
-    }, clear=False)
-    @patch("hbl_core.payment_gateways._json_request")
-    def test_validates_confirmed_usdt_trc20_transfer(self, mock_request):
-        mock_request.return_value = {
-            "data": [{
-                "event_name": "Transfer",
-                "contract_address": "TUSDTCONTRACTADDRESS",
-                "result": {
-                    "to": "TRECIPIENTADDRESS1234567890123456",
-                    "from": "TSENDER",
-                    "value": "100000000",
-                },
-            }]
-        }
-        deposit = SimpleNamespace(
-            txid="a" * 64,
-            payment_amount=Decimal("100"),
-            payment_currency="USDT",
-            payment_method=SimpleNamespace(
-                kind=PaymentMethod.Kind.USDT_TRC20,
-                destination="TRECIPIENTADDRESS1234567890123456",
-            ),
         )
-        result = verify_trc20_deposit(deposit)
-        self.assertEqual(result["amount"], "100")
-        self.assertEqual(result["network"], "TRC20")
 
-
-class BscValidationTests(SimpleTestCase):
-    @patch.dict(os.environ, {
-        "BSC_RPC_URL": "https://rpc.invalid.example",
-        "USDT_BEP20_CONTRACT": "0x1111111111111111111111111111111111111111",
-        "USDT_BEP20_DECIMALS": "18",
-        "BSC_REQUIRED_CONFIRMATIONS": "12",
-    }, clear=False)
-    @patch("hbl_core.payment_gateways._bsc_rpc")
-    def test_validates_confirmed_bep20_transfer(self, mock_rpc):
-        recipient = "0x2222222222222222222222222222222222222222"
-        recipient_topic = "0x" + ("0" * 24) + recipient[2:]
-        amount_hex = hex(100 * 10**18)
-        receipt = {
-            "status": "0x1",
-            "blockNumber": hex(100),
-            "logs": [{
-                "address": "0x1111111111111111111111111111111111111111",
-                "topics": [_TRANSFER_TOPIC, "0x" + "0" * 64, recipient_topic],
-                "data": amount_hex,
-            }],
-        }
-        mock_rpc.side_effect = [receipt, hex(111)]
-        deposit = SimpleNamespace(
-            txid="0x" + "a" * 64,
-            payment_amount=Decimal("100"),
-            payment_currency="USDT",
-            payment_method=SimpleNamespace(
-                kind=PaymentMethod.Kind.USDT_BEP20,
-                destination=recipient,
-            ),
+        self.bank = PaymentMethod.objects.create(
+            kind=PaymentMethod.Kind.BANK,
+            label="Transferencia bancaria manual",
+            currency="NIO",
+            destination="Cuenta de prueba",
+            min_amount=Decimal("1.00"),
+            balance_rate=Decimal("1.00"),
+            require_proof=True,
+            active=True,
         )
-        result = verify_bep20_deposit(deposit)
-        self.assertEqual(result["amount"], "100")
-        self.assertEqual(result["confirmations"], 12)
+
+    def _proof(self):
+        buffer = BytesIO()
+        Image.new("RGB", (10, 10), "white").save(buffer, format="PNG")
+        return SimpleUploadedFile("comprobante.png", buffer.getvalue(), content_type="image/png")
+
+    def test_manual_deposit_stays_pending_and_does_not_credit_balance(self):
+        response = self.client.post(
+            reverse("hbl_wallet"),
+            {
+                "payment_method": self.bank.id,
+                "payment_amount": "100.00",
+                "reference": "REF-12345",
+                "proof": self._proof(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        deposit = Deposit.objects.get(user=self.user)
+        self.assertEqual(deposit.status, Deposit.Status.PENDING)
+        self.assertTrue(bool(deposit.proof))
+
+        self.user.refresh_from_db()
+        self.assertEqual(Decimal(self.user.saldo), Decimal("0.00"))
+
+    def test_proof_is_mandatory(self):
+        response = self.client.post(
+            reverse("hbl_wallet"),
+            {
+                "payment_method": self.bank.id,
+                "payment_amount": "100.00",
+                "reference": "REF-54321",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Deposit.objects.filter(user=self.user).exists())
+        self.assertContains(response, "requiere comprobante")
+
+    def test_paypal_and_tilopay_are_not_available(self):
+        paypal = PaymentMethod.objects.create(
+            kind=PaymentMethod.Kind.MOBILE_WALLET,
+            label="PayPal",
+            currency="USD",
+            network="PAYPAL",
+            min_amount=Decimal("1.00"),
+            balance_rate=Decimal("36.62"),
+            active=True,
+        )
+        tilopay = PaymentMethod.objects.create(
+            kind=PaymentMethod.Kind.MOBILE_WALLET,
+            label="Tilopay",
+            currency="USD",
+            network="TILOPAY",
+            min_amount=Decimal("1.00"),
+            balance_rate=Decimal("36.62"),
+            active=True,
+        )
+
+        response = self.client.get(reverse("hbl_wallet"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, paypal.label)
+        self.assertNotContains(response, tilopay.label)
+
+        response = self.client.post(
+            reverse("hbl_wallet"),
+            {
+                "payment_method": paypal.id,
+                "payment_amount": "10.00",
+                "proof": self._proof(),
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Deposit.objects.filter(payment_method=paypal).exists())
