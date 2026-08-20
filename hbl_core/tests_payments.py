@@ -1,6 +1,7 @@
-import base64
 from decimal import Decimal
+from io import BytesIO
 
+from PIL import Image
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -10,11 +11,6 @@ from hbl_core.models import CurrencyRate, Deposit, PaymentMethod, PlatformConfig
 
 
 User = get_user_model()
-
-
-PNG_1X1 = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII="
-)
 
 
 @override_settings(
@@ -54,7 +50,9 @@ class ManualDepositTests(TestCase):
         )
 
     def _proof(self):
-        return SimpleUploadedFile("comprobante.png", PNG_1X1, content_type="image/png")
+        buffer = BytesIO()
+        Image.new("RGB", (10, 10), "white").save(buffer, format="PNG")
+        return SimpleUploadedFile("comprobante.png", buffer.getvalue(), content_type="image/png")
 
     def test_manual_deposit_stays_pending_and_does_not_credit_balance(self):
         response = self.client.post(
@@ -87,7 +85,7 @@ class ManualDepositTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Deposit.objects.filter(user=self.user).exists())
-        self.assertContains(response, "Debes subir un comprobante")
+        self.assertContains(response, "requiere comprobante")
 
     def test_paypal_and_tilopay_are_not_available(self):
         paypal = PaymentMethod.objects.create(
