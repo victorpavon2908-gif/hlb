@@ -1,24 +1,23 @@
-# HBL · USDT TRC20 / BEP20
+# HBL · Métodos de recarga
 
-HBL queda restringido a **dos métodos de recarga**:
+HBL queda restringido a **tres métodos de recarga**:
 
 - USDT por TRON / TRC20.
 - USDT por BNB Smart Chain / BEP20.
+- Transferencia bancaria.
 
-`build.sh` ejecuta `seed_payment_gateways` en cada despliegue. Ese comando crea/normaliza estos dos métodos y desactiva cualquier otro método de recarga.
+`build.sh` ejecuta `seed_payment_gateways` en cada despliegue. Ese comando normaliza estos tres métodos, desactiva cualquier otro y elimina métodos antiguos que no tengan historial asociado.
 
-## Direcciones receptoras
+## TRC20 y BEP20
 
-En Binance abre **Depositar → Cripto → USDT** y copia por separado la dirección para cada red. En Render configura:
+En Render configura las direcciones públicas receptoras:
 
 ```env
 USDT_TRC20_ADDRESS=T...
 USDT_BEP20_ADDRESS=0x...
 ```
 
-Estas direcciones son públicas y sirven únicamente para recibir fondos. El dinero enviado por el usuario llega a la cuenta propietaria de esas direcciones.
-
-Opcionalmente HBL también puede obtener esas direcciones mediante la API de Binance:
+Opcionalmente HBL puede obtenerlas mediante la API de Binance:
 
 ```env
 BINANCE_API_KEY=
@@ -26,11 +25,9 @@ BINANCE_API_SECRET=
 BINANCE_API_BASE_URL=https://api.binance.com
 ```
 
-Usa una API key con permisos mínimos y **sin permiso de retiro**. La API Secret nunca se guarda en la base de datos ni se envía al navegador.
+Usa una API key con permisos mínimos y **sin permiso de retiro**.
 
-## Validación automática en blockchain
-
-Variables disponibles:
+La validación automática usa:
 
 ```env
 TRONGRID_API_URL=https://api.trongrid.io
@@ -43,34 +40,33 @@ BSC_REQUIRED_CONFIRMATIONS=12
 CRYPTO_TX_MAX_AGE_MINUTES=30
 ```
 
-`TRONGRID_API_KEY` es opcional pero recomendable para evitar límites bajos del endpoint público. `BSC_RPC_URL` puede sustituirse por un RPC privado si el volumen aumenta.
+Para TRC20/BEP20 el usuario registra monto exacto y TXID. HBL valida existencia, estado, token, red, destino, monto, confirmaciones y unicidad del TXID antes de acreditar saldo.
 
-## Flujo de recarga
+## Transferencia bancaria
 
-1. El usuario escoge TRC20 o BEP20.
-2. HBL muestra la dirección receptora correspondiente.
-3. El usuario envía USDT usando exactamente esa red.
-4. El usuario registra el monto exacto y pega el TXID; el comprobante queda como respaldo opcional.
-5. HBL consulta la blockchain y valida:
-   - formato y existencia del TXID;
-   - ejecución exitosa;
-   - contrato del token USDT esperado;
-   - dirección receptora exacta de HBL;
-   - monto exacto enviado;
-   - finalización/confirmaciones de la red;
-   - antigüedad razonable del TXID;
-   - que el TXID no haya sido registrado previamente.
-6. Si todo coincide, `approve_deposit()` acredita el saldo de forma idempotente.
-7. Si solo faltan confirmaciones o el proveedor blockchain falla temporalmente, queda `PROCESSING` y la billetera reintenta automáticamente mientras el usuario permanece en la pantalla.
-8. Si token, destino o monto no coinciden, queda `PENDING` para revisión manual y no se acredita saldo.
+Puede configurarse desde **HBL Control → Métodos de pago** o mediante variables de Render:
 
-Además existe el comando de respaldo:
+```env
+BANK_TRANSFER_DESTINATION=
+BANK_TRANSFER_NETWORK=
+BANK_TRANSFER_INSTRUCTIONS=
+```
+
+Si esas variables están vacías, el deploy conserva los datos bancarios ya guardados en la base de datos.
+
+La transferencia bancaria exige comprobante. La recarga queda `PENDING` hasta que administración la revise y apruebe.
+
+## Comportamiento en la app
+
+Los únicos métodos visibles para el usuario son TRC20, BEP20 y transferencia bancaria. Los métodos antiguos con historial se conservan únicamente como registros inactivos para no romper recargas anteriores; los que no tienen historial se eliminan durante el deploy.
+
+## Reconciliación cripto
 
 ```bash
 python manage.py sync_crypto_deposits --limit 100
 ```
 
-Para reintentar también depósitos enviados a revisión manual:
+También puede reintentar pendientes manuales:
 
 ```bash
 python manage.py sync_crypto_deposits --include-pending --limit 100
@@ -80,8 +76,7 @@ python manage.py sync_crypto_deposits --include-pending --limit 100
 
 - Nunca guardes seed phrases, private keys, contraseñas de Binance ni códigos 2FA en HBL.
 - Nunca subas `.env` al repositorio.
-- No habilites permisos de retiro en una API key que solo consulta direcciones.
-- Un TXID existente no basta: HBL exige token, destino y monto correctos antes de acreditar.
+- Un TXID existente no basta: HBL exige token, destino y monto correctos.
 - El TXID es único en base de datos para evitar doble acreditación.
-- Las discrepancias quedan para revisión manual en vez de acreditarse automáticamente.
+- La transferencia bancaria nunca se acredita automáticamente solo por subir una imagen.
 - Mantén `DEBUG=False`, HTTPS y PostgreSQL en producción.
