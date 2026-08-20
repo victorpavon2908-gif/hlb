@@ -1,67 +1,53 @@
-# HBL · Pagos manuales
+# HBL · USDT TRC20 / BEP20
 
-HBL queda configurado para trabajar únicamente con **recargas manuales**. No se usan PayPal ni Tilopay y no existe acreditación automática desde la billetera.
+HBL queda restringido a **dos métodos de recarga**:
 
-## Flujo
+- USDT por TRON / TRC20.
+- USDT por BNB Smart Chain / BEP20.
 
-1. El usuario selecciona un método manual habilitado.
-2. Realiza la transferencia al destino mostrado por HBL.
-3. Escribe referencia/TXID cuando el método lo requiera.
-4. Sube un comprobante JPG/PNG/WebP.
-5. La recarga se guarda con estado `PENDING`.
-6. Administración revisa el comprobante desde **HBL Control → Recargas**.
-7. Solo una aprobación administrativa llama a `approve_deposit()` y acredita el saldo.
+`build.sh` ejecuta `seed_payment_gateways` en cada despliegue. Ese comando crea/normaliza estos dos métodos y desactiva cualquier otro método de recarga.
 
-## Métodos
+## Opción 1 — Direcciones públicas de Binance
 
-Los métodos se administran desde **HBL Control → Métodos de pago**. Puedes mantener, por ejemplo:
+En Binance abre **Depositar → Cripto → USDT** y copia por separado la dirección para cada red. En Render configura:
 
-- Transferencia bancaria.
-- Binance ID / referencia manual.
-- USDT TRC20 manual.
-- USDT BEP20 manual.
-- Otra criptomoneda/red manual.
-- Giro o remesa.
-- Billetera móvil manual.
-
-PayPal, Tilopay y Binance Pay automático quedan desactivados y no aparecen en la billetera.
-
-## Comprobante obligatorio
-
-Toda recarga visible en la billetera exige comprobante. Para métodos de criptomonedas o Binance ID también puede exigirse TXID/referencia.
-
-El comprobante se almacena con el depósito y debe revisarse antes de aprobarlo.
-
-## Deploy
-
-`build.sh` sigue ejecutando:
-
-```text
-migrate
-collectstatic
-seed_hbl
-seed_payment_gateways
+```env
+USDT_TRC20_ADDRESS=T...
+USDT_BEP20_ADDRESS=0x...
 ```
 
-Ahora `seed_payment_gateways` no activa gateways: desactiva métodos automáticos y fuerza `require_proof=True` en los métodos manuales existentes.
+Estas direcciones son públicas y sirven únicamente para recibir fondos. El dinero enviado por el usuario llegará a la cuenta de Binance propietaria de esas direcciones.
 
-## Configuración
+## Opción 2 — Obtener las direcciones por API
 
-Los datos reales del comercio no se guardan en variables de pasarela. Se configuran desde HBL Control:
+También puedes configurar:
 
-- Nombre del método.
-- Moneda.
-- Red si aplica.
-- Destino (cuenta, wallet, ID, etc.).
-- Instrucciones.
-- Monto mínimo/máximo.
-- Requerir TXID/referencia.
-- Estado activo.
+```env
+BINANCE_API_KEY=
+BINANCE_API_SECRET=
+BINANCE_API_BASE_URL=https://api.binance.com
+```
+
+Durante el deploy HBL consulta `GET /sapi/v1/capital/deposit/address` para `USDT` con red `TRX` y `BSC`, valida el formato y guarda únicamente la dirección pública resultante en el método de pago.
+
+La API Secret nunca se guarda en la base de datos ni se envía al navegador. Usa una API key con los permisos mínimos necesarios y **sin permisos de retiro**.
+
+Si la API falla pero existe una dirección pública válida configurada por variable de entorno o ya guardada en la base de datos, HBL usa esa dirección como respaldo.
+
+## Flujo de recarga
+
+1. El usuario escoge TRC20 o BEP20.
+2. HBL muestra la dirección correspondiente y permite copiarla.
+3. El usuario envía USDT usando exactamente esa red.
+4. El usuario registra el monto y el TXID; el comprobante es opcional.
+5. La recarga queda pendiente hasta revisión y aprobación administrativa.
+
+La transferencia blockchain sí llega directamente a la billetera receptora; la acreditación del **saldo interno HBL** continúa bajo revisión administrativa para evitar acreditar TXID falsos o montos incorrectos.
 
 ## Seguridad
 
-- No subir `.env` al repositorio.
-- No almacenar private keys ni seed phrases.
-- Verificar manualmente que monto, destino y referencia coincidan con el comprobante.
-- No aprobar depósitos dudosos o incompletos.
-- Mantener HTTPS, `DEBUG=False` y PostgreSQL en producción.
+- Nunca guardes seed phrases, private keys ni códigos 2FA en HBL.
+- Nunca subas `.env` al repositorio.
+- No habilites permisos de retiro en una API key que solo se usa para consultar direcciones.
+- Verifica que TRC20 se envíe por TRON y BEP20 por BNB Smart Chain.
+- Mantén `DEBUG=False`, HTTPS y PostgreSQL en producción.

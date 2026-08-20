@@ -19,7 +19,12 @@
         {% if field.name == 'accept_terms' %}
           <label class="check-label" for="{{ field.id_for_label }}">{{ field }} <span>{{ field.label }}</span></label>
         {% else %}
-          <label class="field-label" for="{{ field.id_for_label }}"><span>{{ field.label }}</span><span>{% if field.field.required %}Obligatorio{% else %}Opcional{% endif %}</span></label>{{ field }}
+          <label class="field-label" for="{{ field.id_for_label }}"><span>{{ field.label }}</span><span>{% if field.field.required %}Obligatorio{% else %}Opcional{% endif %}</span></label>
+          {% if field.name == 'password1' or field.name == 'password2' %}
+            <div class="password-field-wrap" style="position:relative">{{ field }}<button type="button" data-password-toggle="{{ field.id_for_label }}" aria-label="Mostrar contraseña" aria-pressed="false" title="Mostrar contraseña" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);width:34px;height:34px;border:0;border-radius:9px;background:transparent;color:#cbd5e1;display:grid;place-items:center;font-size:17px;z-index:2">👁</button></div>
+          {% else %}
+            {{ field }}
+          {% endif %}
         {% endif %}
         {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}
       </div>
@@ -30,4 +35,22 @@
     <p class="muted center">Al continuar aceptas los <a href="{% url 'hbl_terms' %}" target="_blank" rel="noopener">términos y políticas del programa</a>. ¿Ya tienes cuenta? <a href="{% url 'hbl_login' %}">Iniciar sesión</a></p>
   </section>
 </section>
+<script>
+(() => {
+  document.querySelectorAll('[data-password-toggle]').forEach((button) => {
+    const input = document.getElementById(button.dataset.passwordToggle);
+    if (!input) return;
+    input.style.paddingRight = '46px';
+    button.addEventListener('click', () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      button.setAttribute('aria-pressed', show ? 'true' : 'false');
+      button.setAttribute('aria-label', show ? 'Ocultar contraseña' : 'Mostrar contraseña');
+      button.title = show ? 'Ocultar contraseña' : 'Mostrar contraseña';
+      button.textContent = show ? '◉' : '👁';
+      input.focus({preventScroll: true});
+    });
+  });
+})();
+</script>
 {% endblock %}

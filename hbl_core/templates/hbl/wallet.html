@@ -2,12 +2,12 @@
 {% block title %}Billetera · HBL{% endblock %}
 {% block content %}
 <section class="page-title compact-title">
-  <span class="eyebrow">HBL WALLET</span>
-  <h1>Recargas por transferencia manual.</h1>
+  <span class="eyebrow">HBL WALLET · USDT</span>
+  <h1>Recarga únicamente por TRC20 o BEP20.</h1>
   <p>
     Depósito mínimo global: <b>US$ {{ config.minimum_deposit_usd }}</b> · equivalente actual
     {{ config.base_currency_symbol }} {{ minimum_deposit_nio }} {{ config.base_currency_code }}.
-    Todas las recargas requieren comprobante y se acreditan únicamente después de revisión administrativa.
+    Envía <b>USDT</b> solamente por la misma red indicada en la dirección mostrada.
   </p>
 </section>
 
@@ -15,7 +15,7 @@
   <section class="panel glass-card">
     <div class="panel-heading">
       <div class="panel-icon">↓</div>
-      <div><span class="eyebrow">NUEVA RECARGA</span><h2>Registrar transferencia</h2></div>
+      <div><span class="eyebrow">NUEVA RECARGA</span><h2>Registrar depósito USDT</h2></div>
     </div>
 
     <form method="post" enctype="multipart/form-data" class="form-stack" novalidate>
@@ -25,7 +25,7 @@
       <div class="field-row">
         <label class="field-label" for="{{ field.id_for_label }}">
           <span>{{ field.label }}</span>
-          <span>{% if field.name == 'proof' %}Obligatorio{% elif field.field.required %}Obligatorio{% else %}Según método{% endif %}</span>
+          <span>{% if field.field.required %}Obligatorio{% else %}Opcional{% endif %}</span>
         </label>
         {{ field }}
         {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
@@ -34,48 +34,48 @@
       {% endfor %}
 
       <div class="form-policy">
-        <b>Validación manual.</b>
-        Sube una imagen legible del comprobante. Administración revisará monto, destino, referencia/TXID y comprobante antes de acreditar el saldo. No se acredita ninguna recarga automáticamente.
+        <b>Red correcta obligatoria.</b>
+        Si escoges TRC20, envía por TRON/TRC20. Si escoges BEP20, envía por BNB Smart Chain/BEP20.
+        Pega el TXID real de la transacción. El comprobante es opcional, pero puede ayudar a resolver una revisión.
       </div>
 
-      <button class="primary-btn glow-btn" type="submit">Enviar recarga para revisión</button>
+      <button class="primary-btn glow-btn" type="submit">Registrar depósito para revisión</button>
     </form>
   </section>
 
   <section class="panel">
     <div class="section-head compact">
-      <div><span class="eyebrow">DISPONIBLES</span><h2>Métodos manuales</h2></div>
+      <div><span class="eyebrow">DIRECCIONES DE DEPÓSITO</span><h2>USDT disponible</h2></div>
     </div>
 
     {% for method in methods %}
     <div class="method-card rich-method">
-      <div class="method-icon">
-        {% if method.kind == 'bank' %}🏦
-        {% elif method.kind == 'usdt_trc20' or method.kind == 'usdt_bep20' or method.kind == 'crypto_other' %}₮
-        {% elif method.kind == 'binance_id' %}◉
-        {% else %}◈{% endif %}
-      </div>
+      <div class="method-icon">₮</div>
       <div>
         <strong>{{ method.label }}</strong>
-        <span>{{ method.currency }}{% if method.network %} · {{ method.network }}{% endif %}</span>
+        <span>{{ method.currency }} · {{ method.network }}</span>
         <small>
           Mín. {{ method.min_amount }} {{ method.currency }}
           {% if method.max_amount > 0 %} · Máx. {{ method.max_amount }} {{ method.currency }}{% endif %}
-          · comprobante obligatorio
-          {% if method.require_txid %} · TXID/referencia requerido{% endif %}
-          · revisión manual
+          · TXID obligatorio · revisión antes de acreditar saldo
         </small>
-        {% if method.destination %}<code>{{ method.destination }}</code>{% endif %}
+        {% if method.destination %}
+          <code id="wallet-address-{{ method.id }}">{{ method.destination }}</code>
+          <button class="secondary-btn" type="button" data-copy="#wallet-address-{{ method.id }}" style="width:max-content;min-height:32px;padding:6px 10px;margin-top:5px">Copiar dirección</button>
+        {% endif %}
         {% if method.instructions %}<p>{{ method.instructions }}</p>{% endif %}
       </div>
     </div>
     {% empty %}
-    <p class="muted">No hay métodos manuales habilitados. Administración debe configurar al menos uno.</p>
+    <div class="form-policy">
+      <b>Falta configurar la billetera receptora.</b>
+      Administración debe definir las direcciones públicas USDT TRC20/BEP20 o habilitar la consulta segura de direcciones de depósito de Binance en las variables del servidor.
+    </div>
     {% endfor %}
 
     <div class="form-policy space-top">
       <b>Importante.</b>
-      Envía el dinero únicamente al destino mostrado en HBL y conserva tu comprobante hasta que la recarga sea aprobada.
+      Las direcciones mostradas son únicamente para recibir USDT. No envíes tokens distintos, no cambies de red y nunca compartas una frase semilla o clave privada.
     </div>
   </section>
 </div>
@@ -88,7 +88,7 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Fecha</th><th>Método</th><th>Enviado</th><th>Saldo HBL</th><th>Estado</th><th>Validación</th></tr>
+        <tr><th>Fecha</th><th>Red</th><th>Enviado</th><th>Saldo HBL</th><th>Estado</th><th>Validación</th></tr>
       </thead>
       <tbody>
         {% for dep in deposits %}
@@ -100,7 +100,7 @@
           <td><span class="status {{ dep.status }}">{{ dep.get_status_display }}</span></td>
           <td>
             {% if dep.status == 'pending' or dep.status == 'processing' %}
-              <span class="muted">En revisión manual</span>
+              <span class="muted">En revisión</span>
             {% elif dep.status == 'approved' %}
               <span class="muted">Aprobada</span>
             {% elif dep.status == 'rejected' %}

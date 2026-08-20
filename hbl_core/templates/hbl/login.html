@@ -6,8 +6,26 @@
   <section class="auth-card glass-card">
     <img class="auth-logo" src="{% static 'hbl/img/logo.svg' %}" alt="HBL">
     <span class="eyebrow">ACCESO SEGURO</span><h2>Bienvenido</h2><p>Ingresa con correo, teléfono internacional o usuario.</p>
-    <form method="post" class="form-stack" novalidate>{% csrf_token %}{{ form.non_field_errors }}{% for field in form %}<div class="field-row"><label class="field-label" for="{{ field.id_for_label }}"><span>{{ field.label }}</span><span>Obligatorio</span></label>{{ field }}{{ field.errors }}</div>{% endfor %}<div class="form-policy"><b>Seguridad.</b> Después de varios intentos fallidos HBL aplica una espera temporal. Nunca compartas tu contraseña, códigos 2FA ni claves de billeteras.</div><button class="primary-btn glow-btn" type="submit">Entrar a HBL</button></form>
+    <form method="post" class="form-stack" novalidate>{% csrf_token %}{{ form.non_field_errors }}{% for field in form %}<div class="field-row"><label class="field-label" for="{{ field.id_for_label }}"><span>{{ field.label }}</span><span>Obligatorio</span></label>{% if field.name == 'password' %}<div class="password-field-wrap" style="position:relative">{{ field }}<button type="button" data-password-toggle="{{ field.id_for_label }}" aria-label="Mostrar contraseña" aria-pressed="false" title="Mostrar contraseña" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);width:34px;height:34px;border:0;border-radius:9px;background:transparent;color:#cbd5e1;display:grid;place-items:center;font-size:17px;z-index:2">👁</button></div>{% else %}{{ field }}{% endif %}{{ field.errors }}</div>{% endfor %}<div class="form-policy"><b>Seguridad.</b> Después de varios intentos fallidos HBL aplica una espera temporal. Nunca compartas tu contraseña, códigos 2FA ni claves de billeteras.</div><button class="primary-btn glow-btn" type="submit">Entrar a HBL</button></form>
     <p class="muted center">¿Primera vez? <a href="{% url 'hbl_register' %}">Crear cuenta global</a></p>
   </section>
 </section>
+<script>
+(() => {
+  document.querySelectorAll('[data-password-toggle]').forEach((button) => {
+    const input = document.getElementById(button.dataset.passwordToggle);
+    if (!input) return;
+    input.style.paddingRight = '46px';
+    button.addEventListener('click', () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      button.setAttribute('aria-pressed', show ? 'true' : 'false');
+      button.setAttribute('aria-label', show ? 'Ocultar contraseña' : 'Mostrar contraseña');
+      button.title = show ? 'Ocultar contraseña' : 'Mostrar contraseña';
+      button.textContent = show ? '◉' : '👁';
+      input.focus({preventScroll: true});
+    });
+  });
+})();
+</script>
 {% endblock %}
