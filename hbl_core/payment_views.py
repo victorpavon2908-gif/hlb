@@ -1,35 +1,31 @@
-"""Vistas de recarga manuales.
-
-HBL no usa pasarelas automáticas en este flujo. El usuario registra la
-transferencia, adjunta un comprobante y la recarga queda PENDING hasta que
-administración la aprueba o rechaza desde HBL Control.
-"""
+"""Vistas de recarga USDT con validación automática en blockchain."""
 from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError
-from django.db.models import Q
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.views.decorators.http import require_POST
 
+from .crypto_payments import verify_and_credit_deposit
 from .forms import DepositForm
 from .models import CurrencyRate, Deposit, PaymentMethod, PlatformConfig, RewardLedger
 from .services import HBLError, display_money
 
 
-AUTOMATIC_METHODS = (
-    Q(kind=PaymentMethod.Kind.BINANCE_PAY)
-    | Q(network__iexact="PAYPAL")
-    | Q(network__istartswith="TILOPAY")
-)
+CRYPTO_KINDS = [
+    PaymentMethod.Kind.USDT_TRC20,
+    PaymentMethod.Kind.USDT_BEP20,
+]
 
 
-def _manual_methods():
-    """Métodos visibles en la billetera: únicamente recargas manuales."""
+def _crypto_methods():
+    """Únicamente USDT TRC20 y BEP20 pueden aparecer como recarga."""
     return (
         PaymentMethod.objects
-        .filter(active=True)
-        .exclude(AUTOMATIC_METHODS)
+        .filter(active=True, kind__in=CRYPTO_KINDS)
+        .exclude(destination="")
         .order_by("sort_order", "label")
     )
 
@@ -43,24 +39,40 @@ def _rate_for(method):
     return Decimal(row.rate_to_base) if row else Decimal(method.balance_rate or 0)
 
 
+def _deposit_message(request, deposit):
+    if deposit.status == Deposit.Status.APPROVED:
+        messages.success(
+            request,
+            "Pago confirmado automáticamente en blockchain. Tu saldo HBL ya fue acreditado.",
+        )
+    elif deposit.status == Deposit.Status.PROCESSING:
+        messages.info(
+            request,
+            "TXID recibido. HBL está esperando confirmaciones/finalidad de la blockchain; esta pantalla lo volverá a comprobar automáticamente.",
+        )
+    else:
+        messages.warning(
+            request,
+            "El TXID no pudo aprobarse automáticamente. La recarga quedó para revisión y el saldo no fue acreditado.",
+        )
+
+
 @login_required
 def wallet(request):
     form = DepositForm(request.POST or None, request.FILES or None)
-    manual_methods = _manual_methods()
-    form.fields["payment_method"].queryset = manual_methods
+    crypto_methods = _crypto_methods()
+    form.fields["payment_method"].queryset = crypto_methods
 
     if request.method == "POST" and form.is_valid():
         method = form.cleaned_data["payment_method"]
         payment_amount = form.cleaned_data["payment_amount"]
-        proof = form.cleaned_data.get("proof")
         rate = _rate_for(method)
         config = PlatformConfig.get_solo()
 
-        if not proof:
-            form.add_error(
-                "proof",
-                "Debes subir un comprobante para que administración pueda validar la transferencia.",
-            )
+        if method.kind not in CRYPTO_KINDS:
+            form.add_error("payment_method", "Solo se permiten depósitos USDT por TRC20 o BEP20.")
+        elif not method.destination:
+            form.add_error("payment_method", "La dirección receptora de esta red no está configurada.")
         elif rate <= 0:
             form.add_error("payment_method", "Este método no tiene una tasa de conversión válida.")
         else:
@@ -69,27 +81,27 @@ def wallet(request):
                 form.add_error("payment_amount", "El monto convertido debe ser mayor que cero.")
             else:
                 try:
-                    Deposit.objects.create(
+                    deposit = Deposit.objects.create(
                         user=request.user,
                         payment_method=method,
                         amount=credit_amount,
                         currency=config.base_currency_code.upper(),
                         payment_amount=payment_amount,
-                        payment_currency=(method.currency or config.base_currency_code).upper(),
+                        payment_currency="USDT",
                         balance_rate=rate,
-                        status=Deposit.Status.PENDING,
+                        status=Deposit.Status.PROCESSING,
                         txid=form.cleaned_data.get("txid", ""),
                         reference=form.cleaned_data.get("reference", ""),
-                        proof=proof,
-                        notes="Recarga manual pendiente de validación administrativa.",
+                        proof=form.cleaned_data.get("proof"),
+                        notes="TXID recibido. Validación automática de blockchain iniciada.",
                     )
                 except IntegrityError:
-                    form.add_error("txid", "Ese TXID o referencia ya fue registrado anteriormente.")
+                    form.add_error("txid", "Ese TXID ya fue registrado anteriormente.")
                 else:
-                    messages.success(
-                        request,
-                        "Recarga enviada. Administración revisará el comprobante antes de acreditar el saldo.",
-                    )
+                    # El signal post_save inicia la validación al crear la fila. Refrescamos
+                    # el resultado para informar si ya aprobó o si aún espera confirmaciones.
+                    deposit.refresh_from_db()
+                    _deposit_message(request, deposit)
                     return redirect("hbl_wallet")
 
     deposits = Deposit.objects.filter(user=request.user).select_related("payment_method")[:12]
@@ -108,10 +120,48 @@ def wallet(request):
 
     return render(request, "hbl/wallet.html", {
         "form": form,
-        "methods": manual_methods,
+        "methods": crypto_methods,
         "deposits": deposits,
         "ledger": ledger,
         "config": config,
         "minimum_deposit_nio": minimum_deposit_nio,
         "minimum_withdraw_preferred": minimum_withdraw_preferred,
+    })
+
+
+@login_required
+@require_POST
+def recheck_crypto_deposits(request):
+    """Reintenta las recargas del usuario que aún esperan confirmaciones."""
+    pending_ids = list(
+        Deposit.objects.filter(
+            user=request.user,
+            status=Deposit.Status.PROCESSING,
+            payment_method__kind__in=CRYPTO_KINDS,
+        )
+        .exclude(txid="")
+        .order_by("submitted_at")
+        .values_list("id", flat=True)[:5]
+    )
+
+    approved = 0
+    for deposit_id in pending_ids:
+        try:
+            obj, changed = verify_and_credit_deposit(deposit_id)
+        except Exception:
+            continue
+        if obj.status == Deposit.Status.APPROVED and changed:
+            approved += 1
+
+    processing = Deposit.objects.filter(
+        user=request.user,
+        status=Deposit.Status.PROCESSING,
+        payment_method__kind__in=CRYPTO_KINDS,
+    ).count()
+
+    return JsonResponse({
+        "ok": True,
+        "checked": len(pending_ids),
+        "approved": approved,
+        "processing": processing,
     })
