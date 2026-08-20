@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from hbl_core.models import CurrencyRate, Deposit, PaymentMethod, PlatformConfig
@@ -17,6 +17,12 @@ PNG_1X1 = base64.b64decode(
 )
 
 
+@override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
+)
 class ManualDepositTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="manual-user", password="Testpass123!")
