@@ -7,7 +7,7 @@
   <p>
     Depósito mínimo global: <b>US$ {{ config.minimum_deposit_usd }}</b> · equivalente actual
     {{ config.base_currency_symbol }} {{ minimum_deposit_nio }} {{ config.base_currency_code }}.
-    Envía <b>USDT</b> solamente por la misma red indicada en la dirección mostrada.
+    Envía <b>USDT</b> solamente por la misma red indicada. HBL comprobará el TXID directamente en la blockchain antes de acreditar saldo.
   </p>
 </section>
 
@@ -15,7 +15,7 @@
   <section class="panel glass-card">
     <div class="panel-heading">
       <div class="panel-icon">↓</div>
-      <div><span class="eyebrow">NUEVA RECARGA</span><h2>Registrar depósito USDT</h2></div>
+      <div><span class="eyebrow">NUEVA RECARGA</span><h2>Registrar y validar depósito USDT</h2></div>
     </div>
 
     <form method="post" enctype="multipart/form-data" class="form-stack" novalidate>
@@ -34,12 +34,13 @@
       {% endfor %}
 
       <div class="form-policy">
-        <b>Red correcta obligatoria.</b>
+        <b>Validación automática en blockchain.</b>
         Si escoges TRC20, envía por TRON/TRC20. Si escoges BEP20, envía por BNB Smart Chain/BEP20.
-        Pega el TXID real de la transacción. El comprobante es opcional, pero puede ayudar a resolver una revisión.
+        Pega el TXID real y escribe exactamente el monto enviado. HBL validará token USDT, red, dirección receptora, monto, estado y confirmaciones.
+        Si algo no coincide, el saldo no se acredita automáticamente y queda para revisión.
       </div>
 
-      <button class="primary-btn glow-btn" type="submit">Registrar depósito para revisión</button>
+      <button class="primary-btn glow-btn" type="submit">Registrar y validar depósito</button>
     </form>
   </section>
 
@@ -57,7 +58,7 @@
         <small>
           Mín. {{ method.min_amount }} {{ method.currency }}
           {% if method.max_amount > 0 %} · Máx. {{ method.max_amount }} {{ method.currency }}{% endif %}
-          · TXID obligatorio · revisión antes de acreditar saldo
+          · TXID obligatorio · validación automática antes de acreditar saldo
         </small>
         {% if method.destination %}
           <code id="wallet-address-{{ method.id }}">{{ method.destination }}</code>
@@ -99,15 +100,18 @@
           <td>{{ config.base_currency_symbol }} {{ dep.amount }} {{ config.base_currency_code }}</td>
           <td><span class="status {{ dep.status }}">{{ dep.get_status_display }}</span></td>
           <td>
-            {% if dep.status == 'pending' or dep.status == 'processing' %}
-              <span class="muted">En revisión</span>
+            {% if dep.status == 'processing' %}
+              <span class="muted">Esperando confirmación automática</span>
+            {% elif dep.status == 'pending' %}
+              <span class="muted">Revisión manual requerida</span>
             {% elif dep.status == 'approved' %}
-              <span class="muted">Aprobada</span>
+              <span class="positive">Confirmada y acreditada</span>
             {% elif dep.status == 'rejected' %}
-              <span class="muted">Rechazada</span>
+              <span class="negative">Rechazada</span>
             {% else %}
               <span class="muted">—</span>
             {% endif %}
+            {% if dep.notes %}<small class="muted">{{ dep.notes|truncatechars:150 }}</small>{% endif %}
           </td>
         </tr>
         {% empty %}
