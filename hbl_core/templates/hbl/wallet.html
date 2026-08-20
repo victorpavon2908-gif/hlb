@@ -2,12 +2,12 @@
 {% block title %}Billetera · HBL{% endblock %}
 {% block content %}
 <section class="page-title compact-title">
-  <span class="eyebrow">HBL WALLET · USDT</span>
-  <h1>Recarga únicamente por TRC20 o BEP20.</h1>
+  <span class="eyebrow">HBL WALLET · RECARGAS</span>
+  <h1>TRC20, BEP20 o transferencia bancaria.</h1>
   <p>
     Depósito mínimo global: <b>US$ {{ config.minimum_deposit_usd }}</b> · equivalente actual
     {{ config.base_currency_symbol }} {{ minimum_deposit_nio }} {{ config.base_currency_code }}.
-    Envía <b>USDT</b> solamente por la misma red indicada. HBL comprobará el TXID directamente en la blockchain antes de acreditar saldo.
+    En USDT, HBL valida el TXID automáticamente; en transferencia bancaria, administración valida el comprobante.
   </p>
 </section>
 
@@ -15,7 +15,7 @@
   <section class="panel glass-card">
     <div class="panel-heading">
       <div class="panel-icon">↓</div>
-      <div><span class="eyebrow">NUEVA RECARGA</span><h2>Registrar y validar depósito USDT</h2></div>
+      <div><span class="eyebrow">NUEVA RECARGA</span><h2>Selecciona tu método de pago</h2></div>
     </div>
 
     <form method="post" enctype="multipart/form-data" class="form-stack" novalidate>
@@ -25,7 +25,9 @@
       <div class="field-row">
         <label class="field-label" for="{{ field.id_for_label }}">
           <span>{{ field.label }}</span>
-          <span>{% if field.field.required %}Obligatorio{% else %}Opcional{% endif %}</span>
+          <span>
+            {% if field.name == 'txid' or field.name == 'proof' %}Según método{% elif field.field.required %}Obligatorio{% else %}Opcional{% endif %}
+          </span>
         </label>
         {{ field }}
         {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
@@ -34,49 +36,57 @@
       {% endfor %}
 
       <div class="form-policy">
-        <b>Validación automática en blockchain.</b>
-        Si escoges TRC20, envía por TRON/TRC20. Si escoges BEP20, envía por BNB Smart Chain/BEP20.
-        Pega el TXID real y escribe exactamente el monto enviado. HBL validará token USDT, red, dirección receptora, monto, estado y confirmaciones.
-        Si algo no coincide, el saldo no se acredita automáticamente y queda para revisión.
+        <b>Cómo se valida cada método.</b>
+        Para TRC20/BEP20 pega el TXID real y escribe exactamente el monto enviado; HBL valida token USDT, red, destino, monto, estado y confirmaciones.
+        Para transferencia bancaria sube el comprobante; la recarga queda pendiente hasta aprobación administrativa.
       </div>
 
-      <button class="primary-btn glow-btn" type="submit">Registrar y validar depósito</button>
+      <button class="primary-btn glow-btn" type="submit">Registrar recarga</button>
     </form>
   </section>
 
   <section class="panel">
     <div class="section-head compact">
-      <div><span class="eyebrow">DIRECCIONES DE DEPÓSITO</span><h2>USDT disponible</h2></div>
+      <div><span class="eyebrow">MÉTODOS DISPONIBLES</span><h2>Opciones de depósito</h2></div>
     </div>
 
     {% for method in methods %}
     <div class="method-card rich-method">
-      <div class="method-icon">₮</div>
+      <div class="method-icon">{% if method.kind == 'bank' %}🏦{% else %}₮{% endif %}</div>
       <div>
         <strong>{{ method.label }}</strong>
         <span>{{ method.currency }} · {{ method.network }}</span>
         <small>
           Mín. {{ method.min_amount }} {{ method.currency }}
           {% if method.max_amount > 0 %} · Máx. {{ method.max_amount }} {{ method.currency }}{% endif %}
-          · TXID obligatorio · validación automática antes de acreditar saldo
+          {% if method.kind == 'bank' %}
+            · comprobante obligatorio · revisión administrativa
+          {% else %}
+            · TXID obligatorio · validación automática
+          {% endif %}
         </small>
         {% if method.destination %}
-          <code id="wallet-address-{{ method.id }}">{{ method.destination }}</code>
-          <button class="secondary-btn" type="button" data-copy="#wallet-address-{{ method.id }}" style="width:max-content;min-height:32px;padding:6px 10px;margin-top:5px">Copiar dirección</button>
+          <code id="payment-destination-{{ method.id }}">{{ method.destination }}</code>
+          <button class="secondary-btn" type="button" data-copy="#payment-destination-{{ method.id }}" style="width:max-content;min-height:32px;padding:6px 10px;margin-top:5px">
+            {% if method.kind == 'bank' %}Copiar cuenta{% else %}Copiar dirección{% endif %}
+          </button>
+        {% else %}
+          <p class="muted">Destino pendiente de configuración administrativa.</p>
         {% endif %}
         {% if method.instructions %}<p>{{ method.instructions }}</p>{% endif %}
       </div>
     </div>
     {% empty %}
     <div class="form-policy">
-      <b>Falta configurar la billetera receptora.</b>
-      Administración debe definir las direcciones públicas USDT TRC20/BEP20 o habilitar la consulta segura de direcciones de depósito de Binance en las variables del servidor.
+      <b>No hay métodos configurados.</b>
+      Deben estar disponibles TRC20, BEP20 y transferencia bancaria.
     </div>
     {% endfor %}
 
     <div class="form-policy space-top">
       <b>Importante.</b>
-      Las direcciones mostradas son únicamente para recibir USDT. No envíes tokens distintos, no cambies de red y nunca compartas una frase semilla o clave privada.
+      En cripto usa exactamente la red indicada. En transferencia bancaria verifica cuenta, titular y referencia antes de enviar fondos.
+      Nunca compartas frases semilla, claves privadas ni códigos 2FA.
     </div>
   </section>
 </div>
@@ -89,7 +99,7 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Fecha</th><th>Red</th><th>Enviado</th><th>Saldo HBL</th><th>Estado</th><th>Validación</th></tr>
+        <tr><th>Fecha</th><th>Método</th><th>Enviado</th><th>Saldo HBL</th><th>Estado</th><th>Validación</th></tr>
       </thead>
       <tbody>
         {% for dep in deposits %}
@@ -102,6 +112,8 @@
           <td>
             {% if dep.status == 'processing' %}
               <span class="muted">Esperando confirmación automática</span>
+            {% elif dep.status == 'pending' and dep.payment_method.kind == 'bank' %}
+              <span class="muted">Comprobante pendiente de revisión</span>
             {% elif dep.status == 'pending' %}
               <span class="muted">Revisión manual requerida</span>
             {% elif dep.status == 'approved' %}
