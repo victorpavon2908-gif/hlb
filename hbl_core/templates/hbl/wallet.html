@@ -122,3 +122,34 @@
   </div>
 </section>
 {% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const url = "{% url 'hbl_crypto_recheck' %}";
+  let attempts = 0;
+  const maxAttempts = 36;
+
+  const poll = async () => {
+    if (!window.HBL?.post || attempts >= maxAttempts) return;
+    attempts += 1;
+    try {
+      const response = await window.HBL.post(url);
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data.approved > 0) {
+        window.location.reload();
+        return;
+      }
+      if (data.processing > 0) {
+        window.setTimeout(poll, 10000);
+      }
+    } catch (_) {
+      if (attempts < maxAttempts) window.setTimeout(poll, 15000);
+    }
+  };
+
+  window.setTimeout(poll, 5000);
+});
+</script>
+{% endblock %}
