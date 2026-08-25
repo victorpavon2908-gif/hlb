@@ -595,6 +595,9 @@ NOWPAYMENTS_API_BASE_URL = os.getenv(
 ).strip().rstrip("/")
 NOWPAYMENTS_IPN_CALLBACK_URL = os.getenv("NOWPAYMENTS_IPN_CALLBACK_URL", "").strip()
 NOWPAYMENTS_TIMEOUT_SECONDS = int(os.getenv("NOWPAYMENTS_TIMEOUT_SECONDS", "15"))
+NOWPAYMENTS_USER_AGENT = os.getenv(
+    "NOWPAYMENTS_USER_AGENT", "HBL-Payments/1.0 (+https://hbl-e8cw.onrender.com)"
+).strip()
 
 
 # =========================================================

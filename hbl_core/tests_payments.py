@@ -2,7 +2,7 @@ from decimal import Decimal
 import hashlib
 import hmac
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
@@ -12,6 +12,7 @@ from django.urls import reverse
 from hbl_core.models import CurrencyRate, Deposit, PaymentMethod, PlatformConfig
 from hbl_core.nowpayments import (
     NOWPAYMENTS_PROVIDER,
+    NowPaymentsClient,
     apply_payment_status,
     order_id_for,
 )
@@ -179,6 +180,19 @@ class NowPaymentsDepositTests(TestCase):
         self.assertEqual(response.status_code, 401)
         deposit.refresh_from_db()
         self.assertEqual(deposit.status, Deposit.Status.PROCESSING)
+
+    @patch("hbl_core.nowpayments.urlopen")
+    def test_api_request_identifies_hbl_client(self, mocked_urlopen):
+        response = MagicMock()
+        response.read.return_value = b'{"status":"OK"}'
+        mocked_urlopen.return_value.__enter__.return_value = response
+        client = NowPaymentsClient(api_key="test-key")
+        client._request("GET", "status")
+        request = mocked_urlopen.call_args.args[0]
+        self.assertEqual(
+            request.get_header("User-agent"),
+            "HBL-Payments/1.0 (+https://hbl-e8cw.onrender.com)",
+        )
 
     @patch("hbl_core.nowpayments.NowPaymentsClient.get_payment")
     def test_valid_ipn_reconfirms_with_api_and_credits(self, get_payment):

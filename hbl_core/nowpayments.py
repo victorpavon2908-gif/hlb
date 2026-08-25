@@ -69,6 +69,7 @@ class NowPaymentsClient:
         self.api_key = (api_key if api_key is not None else settings.NOWPAYMENTS_API_KEY).strip()
         self.base_url = (base_url or settings.NOWPAYMENTS_API_BASE_URL).strip().rstrip("/")
         self.timeout = int(timeout or settings.NOWPAYMENTS_TIMEOUT_SECONDS)
+        self.user_agent = settings.NOWPAYMENTS_USER_AGENT.strip()
 
     @property
     def configured(self) -> bool:
@@ -79,7 +80,11 @@ class NowPaymentsClient:
             raise NowPaymentsError("NOWPayments no está configurado todavía.")
 
         body = None
-        headers = {"x-api-key": self.api_key, "Accept": "application/json"}
+        headers = {
+            "x-api-key": self.api_key,
+            "Accept": "application/json",
+            "User-Agent": self.user_agent,
+        }
         if payload is not None:
             body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
             headers["Content-Type"] = "application/json"
@@ -91,7 +96,13 @@ class NowPaymentsClient:
         except HTTPError as exc:
             raw_error = exc.read().decode("utf-8", errors="replace")[:500]
             try:
-                detail = json.loads(raw_error).get("message") or raw_error
+                error_data = json.loads(raw_error)
+                detail = error_data.get("message") or error_data.get("detail") or error_data.get("title") or raw_error
+                if error_data.get("error_code") == 1010:
+                    ray_id = str(error_data.get("ray_id") or "").strip()
+                    detail = "Cloudflare bloqueó la identificación del cliente HTTP"
+                    if ray_id:
+                        detail += f" (Ray ID: {ray_id})"
             except (json.JSONDecodeError, AttributeError):
                 detail = raw_error
             raise NowPaymentsError(f"NOWPayments rechazó la solicitud ({exc.code}): {detail or 'sin detalle'}") from exc
