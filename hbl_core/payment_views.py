@@ -130,7 +130,12 @@ def wallet(request):
     config = PlatformConfig.get_solo()
     usd_rate_row = CurrencyRate.objects.filter(code="USD", active=True).first()
     usd_rate = Decimal(usd_rate_row.rate_to_base) if usd_rate_row else Decimal(config.exchange_rate_usd_nio or 0)
-    minimum_deposit_nio = (Decimal(config.minimum_deposit_usd) * usd_rate).quantize(Decimal("0.01"))
+    minimum_deposit_usdt = (
+        Decimal(settings.NOWPAYMENTS_TEST_MIN_USDT)
+        if settings.NOWPAYMENTS_TEST_MODE
+        else Decimal(config.minimum_deposit_usd)
+    )
+    minimum_deposit_nio = (minimum_deposit_usdt * usd_rate).quantize(Decimal("0.01"))
     try:
         minimum_withdraw_preferred = display_money(
             config.withdrawal_min,
@@ -146,9 +151,11 @@ def wallet(request):
         "active_payment": active_payment,
         "ledger": ledger,
         "config": config,
+        "minimum_deposit_usdt": minimum_deposit_usdt,
         "minimum_deposit_nio": minimum_deposit_nio,
         "minimum_withdraw_preferred": minimum_withdraw_preferred,
         "nowpayments_ready": _integration_ready(),
+        "nowpayments_test_mode": settings.NOWPAYMENTS_TEST_MODE,
     })
 
 

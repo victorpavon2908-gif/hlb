@@ -5,11 +5,18 @@
   <span class="eyebrow">HBL WALLET · RECARGAS</span>
   <h1>Deposita USDT por TRC20 o BEP20.</h1>
   <p>
-    Depósito mínimo global: <b>US$ {{ config.minimum_deposit_usd }}</b> · equivalente actual
+    Depósito mínimo global: <b>{{ minimum_deposit_usdt }} USDT</b> · equivalente actual
     {{ config.base_currency_symbol }} {{ minimum_deposit_nio }} {{ config.base_currency_code }}.
     NOWPayments detecta el pago y HBL acredita el saldo solamente después de la confirmación final.
   </p>
 </section>
+
+{% if nowpayments_test_mode %}
+<div class="form-policy space-bottom">
+  <b>Modo de prueba activo.</b>
+  El mínimo temporal de HBL es {{ minimum_deposit_usdt }} USDT. NOWPayments puede aplicar un mínimo propio superior según la red y sus comisiones actuales.
+</div>
+{% endif %}
 
 {% if active_payment %}
 <section class="panel glass-card space-bottom">

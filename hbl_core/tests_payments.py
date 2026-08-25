@@ -25,6 +25,7 @@ User = get_user_model()
     NOWPAYMENTS_API_KEY="test-api-key",
     NOWPAYMENTS_IPN_SECRET="test-ipn-secret",
     NOWPAYMENTS_IPN_CALLBACK_URL="https://example.test/api/pagos/nowpayments/ipn/",
+    NOWPAYMENTS_TEST_MODE=False,
     STORAGES={
         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
         "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
@@ -128,6 +129,27 @@ class NowPaymentsDepositTests(TestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Deposit.objects.filter(payment_method=self.bank).exists())
+
+    @override_settings(NOWPAYMENTS_TEST_MODE=True, NOWPAYMENTS_TEST_MIN_USDT=Decimal("1"))
+    @patch("hbl_core.payment_views.create_payment_for_deposit")
+    def test_test_mode_allows_one_usdt(self, create_payment):
+        self.trc20.min_amount = Decimal("100.00")
+        self.trc20.save(update_fields=["min_amount"])
+        config = PlatformConfig.get_solo()
+        config.minimum_deposit_usd = Decimal("100.00")
+        config.save(update_fields=["minimum_deposit_usd"])
+        remote = self._remote_created("700099")
+        remote["pay_amount"] = Decimal("1.00000000")
+        remote["price_amount"] = Decimal("1.00000000")
+        create_payment.return_value = remote
+
+        response = self.client.post(reverse("hbl_wallet"), {
+            "payment_method": self.trc20.id,
+            "payment_amount": "1.00",
+        })
+        self.assertEqual(response.status_code, 302)
+        deposit = Deposit.objects.get(provider_payment_id="700099")
+        self.assertEqual(deposit.provider_price_amount, Decimal("1.00000000"))
 
     def test_confirmed_does_not_credit_until_finished(self):
         deposit = self._deposit()

@@ -3,6 +3,7 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django import forms
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
@@ -176,8 +177,13 @@ class DepositForm(forms.Form):
         if method.kind not in CRYPTO_DEPOSIT_KINDS:
             self.add_error("payment_method", "Solo se aceptan depósitos USDT por TRC20 o BEP20.")
             return cleaned
-        if amount < method.min_amount:
-            self.add_error("payment_amount", f"El mínimo del método {method.label} es {method.min_amount} {method.currency}.")
+        method_minimum = (
+            Decimal(settings.NOWPAYMENTS_TEST_MIN_USDT)
+            if settings.NOWPAYMENTS_TEST_MODE
+            else Decimal(method.min_amount)
+        )
+        if amount < method_minimum:
+            self.add_error("payment_amount", f"El mínimo del método {method.label} es {method_minimum} {method.currency}.")
         if method.max_amount and method.max_amount > 0 and amount > method.max_amount:
             self.add_error("payment_amount", f"El máximo del método {method.label} es {method.max_amount} {method.currency}.")
         config = PlatformConfig.get_solo()
@@ -195,11 +201,16 @@ class DepositForm(forms.Form):
             credit_base = Decimal(amount) * rate
             usd_row = CurrencyRate.objects.filter(code="USD", active=True).first()
             usd_to_base = Decimal(usd_row.rate_to_base) if usd_row else Decimal(config.exchange_rate_usd_nio or 0)
-            global_min_base = Decimal(config.minimum_deposit_usd) * usd_to_base
+            global_min_usdt = (
+                Decimal(settings.NOWPAYMENTS_TEST_MIN_USDT)
+                if settings.NOWPAYMENTS_TEST_MODE
+                else Decimal(config.minimum_deposit_usd)
+            )
+            global_min_base = global_min_usdt * usd_to_base
             if credit_base < global_min_base:
                 self.add_error(
                     "payment_amount",
-                    f"La recarga mínima global es US${config.minimum_deposit_usd} (≈ {config.base_currency_symbol}{global_min_base.quantize(Decimal('0.01'))} {base_code}).",
+                    f"La recarga mínima global es US${global_min_usdt} (≈ {config.base_currency_symbol}{global_min_base.quantize(Decimal('0.01'))} {base_code}).",
                 )
         return cleaned
 

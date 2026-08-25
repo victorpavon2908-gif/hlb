@@ -29,6 +29,17 @@ NOWPAYMENTS_TIMEOUT_SECONDS=15
 
 No guardes estos secretos en Git ni en los campos del panel HBL.
 
+## Prueba temporal con monto pequeño
+
+Para permitir temporalmente órdenes desde 1 USDT agrega en Render:
+
+```env
+NOWPAYMENTS_TEST_MODE=True
+NOWPAYMENTS_TEST_MIN_USDT=1
+```
+
+NOWPayments conserva su propio mínimo dinámico según la red y las comisiones. Al finalizar la prueba cambia `NOWPAYMENTS_TEST_MODE=False` y vuelve a desplegar; HBL restaurará el mínimo normal configurado.
+
 ## Flujo de depósito
 
 1. El usuario elige TRC20 o BEP20 e ingresa el monto.

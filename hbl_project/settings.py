@@ -1,5 +1,6 @@
 import os
 import sys
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from urllib.parse import parse_qsl, unquote, urlparse
 
@@ -598,6 +599,13 @@ NOWPAYMENTS_TIMEOUT_SECONDS = int(os.getenv("NOWPAYMENTS_TIMEOUT_SECONDS", "15")
 NOWPAYMENTS_USER_AGENT = os.getenv(
     "NOWPAYMENTS_USER_AGENT", "HBL-Payments/1.0 (+https://hbl-e8cw.onrender.com)"
 ).strip()
+NOWPAYMENTS_TEST_MODE = env_bool("NOWPAYMENTS_TEST_MODE", False)
+try:
+    NOWPAYMENTS_TEST_MIN_USDT = Decimal(os.getenv("NOWPAYMENTS_TEST_MIN_USDT", "1"))
+except (InvalidOperation, TypeError, ValueError):
+    NOWPAYMENTS_TEST_MIN_USDT = Decimal("1")
+if NOWPAYMENTS_TEST_MIN_USDT <= 0:
+    NOWPAYMENTS_TEST_MIN_USDT = Decimal("1")
 
 
 # =========================================================

@@ -18,7 +18,11 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         config = PlatformConfig.get_solo()
-        min_usdt = Decimal(config.minimum_deposit_usd)
+        min_usdt = (
+            Decimal(settings.NOWPAYMENTS_TEST_MIN_USDT)
+            if settings.NOWPAYMENTS_TEST_MODE
+            else Decimal(config.minimum_deposit_usd)
+        )
         rate = self._usdt_rate(config)
         nowpayments_ready = bool(settings.NOWPAYMENTS_API_KEY and settings.NOWPAYMENTS_IPN_SECRET)
         keep_ids = []
