@@ -1,124 +1,209 @@
 from decimal import Decimal
-from io import BytesIO
+import hashlib
+import hmac
+import json
+from unittest.mock import patch
 
-from PIL import Image
 from django.contrib.auth import get_user_model
-from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from hbl_core.models import CurrencyRate, Deposit, PaymentMethod, PlatformConfig
+from hbl_core.nowpayments import (
+    NOWPAYMENTS_PROVIDER,
+    apply_payment_status,
+    order_id_for,
+)
 
 
 User = get_user_model()
 
 
 @override_settings(
+    NOWPAYMENTS_API_KEY="test-api-key",
+    NOWPAYMENTS_IPN_SECRET="test-ipn-secret",
+    NOWPAYMENTS_IPN_CALLBACK_URL="https://example.test/api/pagos/nowpayments/ipn/",
     STORAGES={
         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
         "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
-    }
+    },
 )
-class ManualDepositTests(TestCase):
+class NowPaymentsDepositTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="manual-user", password="Testpass123!")
+        self.user = User.objects.create_user(username="now-user", password="Testpass123!")
         self.client.force_login(self.user)
-
         config = PlatformConfig.get_solo()
         config.minimum_deposit_usd = Decimal("1.00")
         config.save(update_fields=["minimum_deposit_usd"])
-
         CurrencyRate.objects.update_or_create(
             code="USD",
-            defaults={
-                "name": "US Dollar",
-                "symbol": "$",
-                "rate_to_base": Decimal("36.6200"),
-                "active": True,
-            },
+            defaults={"name": "US Dollar", "symbol": "$", "rate_to_base": Decimal("36.6200"), "active": True},
         )
-
+        CurrencyRate.objects.update_or_create(
+            code="USDT",
+            defaults={"name": "Tether", "symbol": "USDT", "rate_to_base": Decimal("36.6200"), "active": True},
+        )
+        self.trc20 = PaymentMethod.objects.create(
+            kind=PaymentMethod.Kind.USDT_TRC20,
+            label="USDT TRC20",
+            currency="USDT",
+            network="TRON (TRC20)",
+            min_amount=Decimal("1.00"),
+            balance_rate=Decimal("36.62"),
+            require_txid=False,
+            active=True,
+        )
         self.bank = PaymentMethod.objects.create(
             kind=PaymentMethod.Kind.BANK,
-            label="Transferencia bancaria manual",
+            label="Banco manual",
             currency="NIO",
-            destination="Cuenta de prueba",
             min_amount=Decimal("1.00"),
-            balance_rate=Decimal("1.00"),
-            require_proof=True,
             active=True,
         )
 
-    def _proof(self):
-        buffer = BytesIO()
-        Image.new("RGB", (10, 10), "white").save(buffer, format="PNG")
-        return SimpleUploadedFile("comprobante.png", buffer.getvalue(), content_type="image/png")
+    def _remote_created(self, payment_id="700001"):
+        return {
+            "payment_id": payment_id,
+            "payment_status": "waiting",
+            "pay_address": "TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE",
+            "pay_amount": Decimal("100.00000000"),
+            "pay_currency": "usdttrc20",
+            "price_amount": Decimal("100.00000000"),
+        }
 
-    def test_manual_deposit_stays_pending_and_does_not_credit_balance(self):
-        response = self.client.post(
-            reverse("hbl_wallet"),
-            {
-                "payment_method": self.bank.id,
-                "payment_amount": "100.00",
-                "reference": "REF-12345",
-                "proof": self._proof(),
-            },
+    def _deposit(self, payment_id="700002"):
+        return Deposit.objects.create(
+            user=self.user,
+            payment_method=self.trc20,
+            amount=Decimal("3662.00"),
+            currency="NIO",
+            payment_amount=Decimal("100.00000000"),
+            payment_currency="USDT",
+            balance_rate=Decimal("36.62"),
+            status=Deposit.Status.PROCESSING,
+            provider=NOWPAYMENTS_PROVIDER,
+            provider_payment_id=payment_id,
+            provider_status="waiting",
+            provider_price_amount=Decimal("100.00000000"),
+            pay_address="TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE",
         )
 
+    def _provider_status(self, deposit, status):
+        return {
+            "payment_id": deposit.provider_payment_id,
+            "payment_status": status,
+            "order_id": order_id_for(deposit.id),
+            "price_amount": "100.00000000",
+            "price_currency": "usd",
+            "pay_amount": "100.00000000",
+            "pay_currency": "usdttrc20",
+        }
+
+    @patch("hbl_core.payment_views.create_payment_for_deposit")
+    def test_wallet_creates_nowpayments_order_without_txid_or_proof(self, create_payment):
+        create_payment.return_value = self._remote_created()
+        response = self.client.post(reverse("hbl_wallet"), {
+            "payment_method": self.trc20.id,
+            "payment_amount": "100.00",
+        })
         self.assertEqual(response.status_code, 302)
         deposit = Deposit.objects.get(user=self.user)
-        self.assertEqual(deposit.status, Deposit.Status.PENDING)
-        self.assertTrue(bool(deposit.proof))
-
+        self.assertEqual(deposit.status, Deposit.Status.PROCESSING)
+        self.assertEqual(deposit.provider, NOWPAYMENTS_PROVIDER)
+        self.assertEqual(deposit.provider_payment_id, "700001")
+        self.assertEqual(deposit.txid, "")
+        self.assertEqual(deposit.payment_amount, Decimal("100.00000000"))
         self.user.refresh_from_db()
         self.assertEqual(Decimal(self.user.saldo), Decimal("0.00"))
 
-    def test_proof_is_mandatory(self):
-        response = self.client.post(
-            reverse("hbl_wallet"),
-            {
-                "payment_method": self.bank.id,
-                "payment_amount": "100.00",
-                "reference": "REF-54321",
-            },
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(Deposit.objects.filter(user=self.user).exists())
-        self.assertContains(response, "requiere comprobante")
-
-    def test_paypal_and_tilopay_are_not_available(self):
-        paypal = PaymentMethod.objects.create(
-            kind=PaymentMethod.Kind.MOBILE_WALLET,
-            label="PayPal",
-            currency="USD",
-            network="PAYPAL",
-            min_amount=Decimal("1.00"),
-            balance_rate=Decimal("36.62"),
-            active=True,
-        )
-        tilopay = PaymentMethod.objects.create(
-            kind=PaymentMethod.Kind.MOBILE_WALLET,
-            label="Tilopay",
-            currency="USD",
-            network="TILOPAY",
-            min_amount=Decimal("1.00"),
-            balance_rate=Decimal("36.62"),
-            active=True,
-        )
-
+    def test_only_trc20_and_bep20_are_visible_and_accepted(self):
         response = self.client.get(reverse("hbl_wallet"))
+        self.assertContains(response, self.trc20.label)
+        self.assertNotContains(response, self.bank.label)
+        response = self.client.post(reverse("hbl_wallet"), {
+            "payment_method": self.bank.id,
+            "payment_amount": "100.00",
+        })
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, paypal.label)
-        self.assertNotContains(response, tilopay.label)
+        self.assertFalse(Deposit.objects.filter(payment_method=self.bank).exists())
 
+    def test_confirmed_does_not_credit_until_finished(self):
+        deposit = self._deposit()
+        checked, changed = apply_payment_status(deposit.id, self._provider_status(deposit, "confirmed"))
+        self.assertFalse(changed)
+        self.assertEqual(checked.status, Deposit.Status.PROCESSING)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.saldo, Decimal("0.00"))
+
+    def test_finished_credits_exactly_once(self):
+        deposit = self._deposit()
+        payload = self._provider_status(deposit, "finished")
+        first, first_changed = apply_payment_status(deposit.id, payload)
+        second, second_changed = apply_payment_status(deposit.id, payload)
+        self.assertTrue(first_changed)
+        self.assertFalse(second_changed)
+        self.assertEqual(first.status, Deposit.Status.APPROVED)
+        self.assertEqual(second.status, Deposit.Status.APPROVED)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.saldo, Decimal("3662.00"))
+
+    def test_partial_payment_goes_to_manual_review(self):
+        deposit = self._deposit()
+        checked, changed = apply_payment_status(deposit.id, self._provider_status(deposit, "partially_paid"))
+        self.assertFalse(changed)
+        self.assertEqual(checked.status, Deposit.Status.PENDING)
+        self.assertIn("Revisión manual", checked.notes)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.saldo, Decimal("0.00"))
+
+    def test_mismatched_order_never_credits(self):
+        deposit = self._deposit()
+        payload = self._provider_status(deposit, "finished")
+        payload["order_id"] = "hbl-deposit:otra"
+        checked, changed = apply_payment_status(deposit.id, payload)
+        self.assertFalse(changed)
+        self.assertEqual(checked.status, Deposit.Status.PENDING)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.saldo, Decimal("0.00"))
+
+    def test_ipn_rejects_invalid_signature(self):
+        deposit = self._deposit()
+        payload = self._provider_status(deposit, "finished")
         response = self.client.post(
-            reverse("hbl_wallet"),
-            {
-                "payment_method": paypal.id,
-                "payment_amount": "10.00",
-                "proof": self._proof(),
-            },
+            reverse("hbl_nowpayments_ipn"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_X_NOWPAYMENTS_SIG="invalid",
+        )
+        self.assertEqual(response.status_code, 401)
+        deposit.refresh_from_db()
+        self.assertEqual(deposit.status, Deposit.Status.PROCESSING)
+
+    @patch("hbl_core.nowpayments.NowPaymentsClient.get_payment")
+    def test_valid_ipn_reconfirms_with_api_and_credits(self, get_payment):
+        deposit = self._deposit()
+        payload = self._provider_status(deposit, "finished")
+        canonical = json.dumps(payload, separators=(",", ":"), sort_keys=True, ensure_ascii=False)
+        signature = hmac.new(b"test-ipn-secret", canonical.encode(), hashlib.sha512).hexdigest()
+        get_payment.return_value = payload
+        response = self.client.post(
+            reverse("hbl_nowpayments_ipn"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_X_NOWPAYMENTS_SIG=signature,
         )
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(Deposit.objects.filter(payment_method=paypal).exists())
+        self.assertTrue(response.json()["credited"])
+        get_payment.assert_called_once_with(deposit.provider_payment_id)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.saldo, Decimal("3662.00"))
+
+    @override_settings(NOWPAYMENTS_API_KEY="key", NOWPAYMENTS_IPN_SECRET="secret")
+    def test_deploy_seed_leaves_exactly_two_crypto_networks_active(self):
+        call_command("seed_payment_gateways", verbosity=0)
+        active_kinds = set(PaymentMethod.objects.filter(active=True).values_list("kind", flat=True))
+        self.assertEqual(active_kinds, {
+            PaymentMethod.Kind.USDT_TRC20,
+            PaymentMethod.Kind.USDT_BEP20,
+        })

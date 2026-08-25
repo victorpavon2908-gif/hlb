@@ -29,6 +29,7 @@ from .models import (
     WheelPrize,
     WheelSpin,
 )
+from .payment_policies import CRYPTO_WITHDRAWAL_SLUGS, detect_usdt_withdrawal_network
 
 User = get_user_model()
 MONEY = Decimal("0.01")
@@ -747,7 +748,7 @@ def reject_deposit(deposit_id, notes=""):
 
 @transaction.atomic
 def request_withdrawal(user_id, payout_account, requested_amount, requested_currency=None):
-    """Crea un retiro multimoneda.
+    """Crea un retiro que siempre se paga en USDT por TRC20 o BEP20.
 
     requested_amount se interpreta en la moneda local asociada al país del cliente.
     amount/fee/net_amount quedan congelados en moneda base para contabilidad y
@@ -760,12 +761,19 @@ def request_withdrawal(user_id, payout_account, requested_amount, requested_curr
     method = getattr(payout_account, "withdrawal_method", None)
     if not method or not method.active:
         raise HBLError("Ese método de retiro ya no está disponible.")
+    if method.slug not in CRYPTO_WITHDRAWAL_SLUGS:
+        raise HBLError("Solo se permiten retiros USDT por TRC20 o BEP20.")
+    detected_slug = detect_usdt_withdrawal_network(payout_account.identifier)
+    if detected_slug != method.slug:
+        raise HBLError("La dirección no corresponde a la red de retiro guardada.")
     if method.country and method.country != getattr(user, "country", ""):
         raise HBLError("Ese método de retiro no está disponible para tu país.")
 
     base_code = config.base_currency_code.upper()
     requested_currency = (requested_currency or getattr(user, "preferred_currency", "") or base_code).upper()
     payout_currency = method.payout_currency_for(user)
+    if payout_currency != "USDT":
+        raise HBLError("Los retiros solo pueden pagarse en USDT.")
     requested_amount = Decimal(requested_amount)
     if requested_amount <= 0:
         raise HBLError("El monto a retirar debe ser mayor que cero.")

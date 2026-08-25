@@ -7,7 +7,8 @@ Plataforma Django/PWA de membresías y recompensas por tareas de escucha, con **
 - Moneda contable base: **NIO (C$)**.
 - Tasa inicial de referencia: **US$1 = C$36.62**; las tasas operativas se administran en `/control/monedas/`.
 - Recarga mínima global: **US$100** o su equivalente en la moneda del método.
-- Retiro mínimo global: **500 unidades de la moneda base**; el cliente lo ve convertido a su moneda local.
+- Depósitos y retiros: **solo USDT por TRC20 o BEP20**.
+- Retiro mínimo global: **500 unidades de la moneda base**; el cliente ve su equivalente antes de recibir USDT.
 - Plan inicial HBL 100: US$100, 30 días, 3 canciones diarias, recompensa diaria C$122.
 - Escucha: mínimo global **10 segundos efectivos por canción**. Una canción puede exigir un mínimo mayor; nunca menor al global.
 - Recompensa diaria: se acredita **una sola vez y únicamente después de completar toda la playlist del día**.
@@ -28,22 +29,20 @@ Al menos uno es obligatorio. El país asigna la moneda local preferida. El telé
 
 La zona horaria de recompensa se detecta en el dispositivo durante el alta/primer uso y luego queda protegida contra cambios automáticos repetidos para impedir abusos del corte diario.
 
-## Retiro multimoneda
+## Retiros USDT
 
-HBL separa tres conceptos:
+HBL separa tres conceptos contables:
 
 1. **Moneda base:** contabilidad interna.
-2. **Moneda local del país del usuario:** donde escribe el retiro cuando el método es local.
-3. **Moneda de pago del método:** moneda real que recibe (p. ej. MXN, NIO, USD, USDT).
+2. **Moneda del usuario:** donde escribe el monto solicitado.
+3. **Moneda de pago:** siempre USDT.
 
-El usuario escribe el monto en la moneda asociada a su país; la moneda de visualización del perfil no altera esta regla. El servidor lo convierte a la moneda base para validar saldo, mínimo, máximo y comisión; después congela el monto neto en la moneda del método. El historial conserva tasas y monedas usadas en el momento de la solicitud.
+El servidor convierte el monto a la moneda base para validar saldo, mínimo, máximo y comisión; después congela el monto neto en USDT. El historial conserva las tasas usadas en el momento de la solicitud.
 
 Cada método de retiro define desde `/control/metodos-retiro/`:
 
-- país o disponibilidad global;
-- moneda local del usuario o moneda fija;
-- red/proveedor;
-- tipo de identificador y validación (banco/IBAN, Binance ID, TRC20, BEP20/EVM, correo, teléfono o personalizado);
+- red TRC20 o BEP20;
+- validación automática de la dirección (`T...` o `0x...`);
 - placeholder e instrucciones visibles;
 - titular obligatorio sí/no;
 - mínimo y máximo en moneda base;
@@ -51,6 +50,8 @@ Cada método de retiro define desde `/control/metodos-retiro/`:
 - estado y orden.
 
 El mínimo efectivo es el mayor entre el mínimo global y el mínimo propio del método.
+
+Los depósitos crean una orden USDT TRC20/BEP20 en NOWPayments y se acreditan únicamente cuando el proveedor confirma el estado final `finished`. Los pagos parciales o inconsistentes quedan disponibles para verificación manual. Los retiros siempre quedan pendientes para revisión y pago manual por administración.
 
 ## Renovación diaria de música
 
@@ -73,9 +74,9 @@ Panel: `/control/`
 - `/control/canciones/` — catálogo, archivos y asignación por plan.
 - `/control/monedas/` — tasas contra la moneda base.
 - `/control/configuracion/` — mínimos globales, referidos, escucha, ruleta, mantenimiento.
-- `/control/metodos-pago/` — depósitos/recargas.
+- `/control/metodos-pago/` — redes de depósito USDT TRC20/BEP20 gestionadas por NOWPayments.
 - `/control/recargas/` — aprobación/rechazo.
-- `/control/metodos-retiro/` — métodos, validaciones, mínimos, máximos y comisiones.
+- `/control/metodos-retiro/` — redes USDT, mínimos, máximos y comisiones.
 - `/control/retiros/` — pago/rechazo con referencia/motivo obligatorio.
 - `/control/referidos/` — niveles y nómina semanal.
 - `/control/ruleta/` — reglas y premios.
@@ -89,36 +90,6 @@ Los formularios operativos incluyen etiquetas de obligatorio/opcional, placehold
 La moneda base puede elegirse durante la configuración inicial. **Después de existir actividad financiera, HBL bloquea su cambio**, porque reinterpretar saldos e historiales sería contablemente inseguro. Para operar otros países después de iniciar, mantén la base y actualiza `/control/monedas/`.
 
 Antes de la primera operación, si se cambia la base, HBL rebasa tasas y convierte los importes configurables del catálogo.
-
-## Binance Pay
-
-La integración queda preparada para:
-
-- Create Order v3;
-- retorno de checkout;
-- webhook firmado;
-- consulta de orden antes de acreditar;
-- validación de `merchantTradeNo`, `prepayId`, moneda, monto y estado;
-- rechazo de webhooks con timestamp fuera de la ventana configurada.
-
-Variables:
-
-```env
-BINANCE_PAY_ENABLED=True
-BINANCE_PAY_API_KEY=...
-BINANCE_PAY_SECRET_KEY=...
-BINANCE_PAY_CURRENCY=USDT
-BINANCE_PAY_SUPPORT_CURRENCY=USDT
-BINANCE_WEBHOOK_MAX_AGE_SECONDS=300
-```
-
-Webhook de producción:
-
-```text
-https://TU-DOMINIO/pagos/binance/webhook/
-```
-
-Nunca escribas claves API, frases semilla o claves privadas en campos visibles del panel.
 
 ## Instalación Windows
 
@@ -157,12 +128,6 @@ python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 python manage.py check --deploy
 python manage.py test
-```
-
-Para sincronización adicional de órdenes Binance pendientes:
-
-```bash
-python manage.py sync_binance_pay --limit 100
 ```
 
 Para nómina de referidos, únicamente cuando la regla esté habilitada/validada por administración:

@@ -1,0 +1,235 @@
+"""Integración mínima y segura con NOWPayments para depósitos USDT."""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import socket
+from decimal import Decimal, InvalidOperation
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+from django.conf import settings
+from django.db import transaction
+
+from .models import Deposit, PaymentMethod
+from .services import approve_deposit
+
+
+NOWPAYMENTS_PROVIDER = "nowpayments"
+PAY_CURRENCY_BY_KIND = {
+    PaymentMethod.Kind.USDT_TRC20: "usdttrc20",
+    PaymentMethod.Kind.USDT_BEP20: "usdtbsc",
+}
+IN_PROGRESS_STATUSES = {"waiting", "confirming", "confirmed", "sending"}
+MANUAL_STATUSES = {"partially_paid"}
+REJECTED_STATUSES = {"failed", "refunded"}
+FINAL_STATUS = "finished"
+
+
+class NowPaymentsError(Exception):
+    """Error controlado al comunicarse o conciliar un pago."""
+
+
+def order_id_for(deposit_id) -> str:
+    return f"hbl-deposit:{deposit_id}"
+
+
+def pay_currency_for_kind(kind: str) -> str:
+    try:
+        return PAY_CURRENCY_BY_KIND[kind]
+    except KeyError as exc:
+        raise NowPaymentsError("La red seleccionada no está permitida en NOWPayments.") from exc
+
+
+def _decimal(value, field_name: str) -> Decimal:
+    try:
+        result = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise NowPaymentsError(f"NOWPayments devolvió {field_name} inválido.") from exc
+    if not result.is_finite() or result < 0:
+        raise NowPaymentsError(f"NOWPayments devolvió {field_name} inválido.")
+    return result
+
+
+def verify_ipn_signature(payload: dict, signature: str, secret: str | None = None) -> bool:
+    """Verifica x-nowpayments-sig usando el JSON ordenado y HMAC-SHA512."""
+    secret = (secret if secret is not None else settings.NOWPAYMENTS_IPN_SECRET).strip()
+    signature = (signature or "").strip().lower()
+    if not secret or not signature or not isinstance(payload, dict):
+        return False
+    message = json.dumps(payload, separators=(",", ":"), sort_keys=True, ensure_ascii=False)
+    expected = hmac.new(secret.encode("utf-8"), message.encode("utf-8"), hashlib.sha512).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+
+class NowPaymentsClient:
+    def __init__(self, api_key: str | None = None, base_url: str | None = None, timeout: int | None = None):
+        self.api_key = (api_key if api_key is not None else settings.NOWPAYMENTS_API_KEY).strip()
+        self.base_url = (base_url or settings.NOWPAYMENTS_API_BASE_URL).strip().rstrip("/")
+        self.timeout = int(timeout or settings.NOWPAYMENTS_TIMEOUT_SECONDS)
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.api_key)
+
+    def _request(self, method: str, path: str, payload: dict | None = None) -> dict:
+        if not self.api_key:
+            raise NowPaymentsError("NOWPayments no está configurado todavía.")
+
+        body = None
+        headers = {"x-api-key": self.api_key, "Accept": "application/json"}
+        if payload is not None:
+            body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+
+        request = Request(f"{self.base_url}/{path.lstrip('/')}", data=body, headers=headers, method=method)
+        try:
+            with urlopen(request, timeout=self.timeout) as response:
+                raw = response.read()
+        except HTTPError as exc:
+            raw_error = exc.read().decode("utf-8", errors="replace")[:500]
+            try:
+                detail = json.loads(raw_error).get("message") or raw_error
+            except (json.JSONDecodeError, AttributeError):
+                detail = raw_error
+            raise NowPaymentsError(f"NOWPayments rechazó la solicitud ({exc.code}): {detail or 'sin detalle'}") from exc
+        except (URLError, TimeoutError, socket.timeout) as exc:
+            raise NowPaymentsError("NOWPayments no respondió a tiempo. Intenta nuevamente.") from exc
+
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise NowPaymentsError("NOWPayments devolvió una respuesta no válida.") from exc
+        if not isinstance(data, dict):
+            raise NowPaymentsError("NOWPayments devolvió una respuesta inesperada.")
+        return data
+
+    def create_payment(self, *, price_amount: Decimal, pay_currency: str, order_id: str, callback_url: str) -> dict:
+        return self._request("POST", "payment", {
+            "price_amount": format(Decimal(price_amount), "f"),
+            "price_currency": "usd",
+            "pay_currency": pay_currency,
+            "ipn_callback_url": callback_url,
+            "order_id": order_id,
+            "order_description": "Recarga de saldo HBL",
+        })
+
+    def get_payment(self, payment_id: str) -> dict:
+        payment_id = str(payment_id).strip()
+        if not payment_id or not payment_id.isdigit():
+            raise NowPaymentsError("El identificador de NOWPayments no es válido.")
+        return self._request("GET", f"payment/{payment_id}")
+
+
+def create_payment_for_deposit(deposit: Deposit, callback_url: str, client: NowPaymentsClient | None = None) -> dict:
+    """Crea el pago remoto y devuelve únicamente datos previamente validados."""
+    client = client or NowPaymentsClient()
+    pay_currency = pay_currency_for_kind(deposit.payment_method.kind)
+    requested_price = _decimal(deposit.provider_price_amount, "price_amount")
+    if requested_price <= 0:
+        raise NowPaymentsError("El monto del depósito debe ser mayor que cero.")
+
+    data = client.create_payment(
+        price_amount=requested_price,
+        pay_currency=pay_currency,
+        order_id=order_id_for(deposit.id),
+        callback_url=callback_url,
+    )
+    payment_id = str(data.get("payment_id") or "").strip()
+    pay_address = str(data.get("pay_address") or "").strip()
+    returned_currency = str(data.get("pay_currency") or "").strip().lower()
+    returned_price = _decimal(data.get("price_amount"), "price_amount")
+    pay_amount = _decimal(data.get("pay_amount"), "pay_amount")
+    if not payment_id.isdigit() or not pay_address or pay_amount <= 0:
+        raise NowPaymentsError("NOWPayments no devolvió instrucciones de pago completas.")
+    if returned_currency != pay_currency or returned_price != requested_price:
+        raise NowPaymentsError("NOWPayments devolvió una moneda o monto distinto al solicitado.")
+
+    return {
+        "payment_id": payment_id,
+        "payment_status": str(data.get("payment_status") or "waiting").strip().lower(),
+        "pay_address": pay_address,
+        "pay_amount": pay_amount,
+        "pay_currency": returned_currency,
+        "price_amount": returned_price,
+    }
+
+
+def _manual_review(deposit: Deposit, provider_status: str, note: str):
+    deposit.provider_status = provider_status[:32]
+    deposit.status = Deposit.Status.PENDING
+    deposit.notes = note
+    deposit.save(update_fields=["provider_status", "status", "notes"])
+    return deposit, False
+
+
+@transaction.atomic
+def apply_payment_status(deposit_id, data: dict):
+    """Aplica un estado consultado por API; solo ``finished`` acredita saldo."""
+    deposit = (
+        Deposit.objects.select_for_update()
+        .select_related("payment_method")
+        .get(pk=deposit_id)
+    )
+    if deposit.provider != NOWPAYMENTS_PROVIDER or not deposit.provider_payment_id:
+        raise NowPaymentsError("La recarga no pertenece a NOWPayments.")
+    if deposit.status == Deposit.Status.APPROVED:
+        return deposit, False
+
+    payment_id = str(data.get("payment_id") or "").strip()
+    order_id = str(data.get("order_id") or "").strip()
+    pay_currency = str(data.get("pay_currency") or "").strip().lower()
+    provider_status = str(data.get("payment_status") or "").strip().lower()
+    expected_currency = pay_currency_for_kind(deposit.payment_method.kind)
+
+    if payment_id != deposit.provider_payment_id:
+        return _manual_review(deposit, provider_status, "El ID del proveedor no coincide. Revisión manual requerida.")
+    if order_id != order_id_for(deposit.id):
+        return _manual_review(deposit, provider_status, "La orden informada por NOWPayments no coincide. Revisión manual requerida.")
+    if pay_currency != expected_currency:
+        return _manual_review(deposit, provider_status, "La moneda o red informada por NOWPayments no coincide. Revisión manual requerida.")
+    try:
+        price_amount = _decimal(data.get("price_amount"), "price_amount")
+    except NowPaymentsError:
+        return _manual_review(deposit, provider_status, "NOWPayments no informó un monto verificable. Revisión manual requerida.")
+    if price_amount != Decimal(deposit.provider_price_amount):
+        return _manual_review(deposit, provider_status, "El monto informado por NOWPayments no coincide. Revisión manual requerida.")
+
+    deposit.provider_status = provider_status[:32]
+    if provider_status == FINAL_STATUS:
+        # Una orden puede recibir el pago después de haber aparecido expirada.
+        # La consulta autenticada al proveedor permite reabrirla de forma segura.
+        deposit.status = Deposit.Status.PROCESSING
+        deposit.save(update_fields=["provider_status", "status"])
+        return approve_deposit(
+            deposit.id,
+            transaction_id=deposit.provider_payment_id,
+            notes="Pago finalizado y confirmado automáticamente por NOWPayments.",
+        )
+    if provider_status in IN_PROGRESS_STATUSES:
+        deposit.status = Deposit.Status.PROCESSING
+        deposit.notes = f"NOWPayments: {provider_status}. Esperando confirmación final."
+        deposit.save(update_fields=["provider_status", "status", "notes"])
+        return deposit, False
+    if provider_status in MANUAL_STATUSES:
+        return _manual_review(deposit, provider_status, "Pago parcial detectado por NOWPayments. Revisión manual requerida.")
+    if provider_status == "expired":
+        deposit.status = Deposit.Status.EXPIRED
+        deposit.notes = "La orden de NOWPayments expiró sin finalizarse."
+        deposit.save(update_fields=["provider_status", "status", "notes"])
+        return deposit, False
+    if provider_status in REJECTED_STATUSES:
+        deposit.status = Deposit.Status.REJECTED
+        deposit.notes = f"NOWPayments marcó el pago como {provider_status}. No se acreditó saldo."
+        deposit.save(update_fields=["provider_status", "status", "notes"])
+        return deposit, False
+    return _manual_review(deposit, provider_status, "Estado desconocido de NOWPayments. Revisión manual requerida.")
+
+
+def reconcile_deposit(deposit_id, client: NowPaymentsClient | None = None):
+    deposit = Deposit.objects.only("provider_payment_id").get(pk=deposit_id)
+    client = client or NowPaymentsClient()
+    data = client.get_payment(deposit.provider_payment_id)
+    return apply_payment_status(deposit_id, data)

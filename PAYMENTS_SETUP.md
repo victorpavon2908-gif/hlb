@@ -1,82 +1,62 @@
-# HBL · Métodos de recarga
+# HBL · Depósitos NOWPayments
 
-HBL queda restringido a **tres métodos de recarga**:
+HBL acepta únicamente USDT por estas dos redes:
 
-- USDT por TRON / TRC20.
-- USDT por BNB Smart Chain / BEP20.
-- Transferencia bancaria.
+- TRON / TRC20 (`usdttrc20` en NOWPayments).
+- BNB Smart Chain / BEP20 (`usdtbsc` en NOWPayments).
 
-`build.sh` ejecuta `seed_payment_gateways` en cada despliegue. Ese comando normaliza estos tres métodos, desactiva cualquier otro y elimina métodos antiguos que no tengan historial asociado.
+Los depósitos se validan automáticamente con la API y los avisos IPN de NOWPayments. Los retiros no usan Mass Payouts: permanecen pendientes para revisión y pago manual por administración.
 
-## TRC20 y BEP20
+## Configuración en NOWPayments
 
-En Render configura las direcciones públicas receptoras:
+1. Crea una API key en el panel de NOWPayments.
+2. En Store Settings genera un secreto IPN.
+3. Configura como callback:
 
-```env
-USDT_TRC20_ADDRESS=T...
-USDT_BEP20_ADDRESS=0x...
+```text
+https://hbl-e8cw.onrender.com/api/pagos/nowpayments/ipn/
 ```
 
-Opcionalmente HBL puede obtenerlas mediante la API de Binance:
+4. En Render agrega:
 
 ```env
-BINANCE_API_KEY=
-BINANCE_API_SECRET=
-BINANCE_API_BASE_URL=https://api.binance.com
+NOWPAYMENTS_API_KEY=tu_api_key
+NOWPAYMENTS_IPN_SECRET=tu_secreto_ipn
+NOWPAYMENTS_API_BASE_URL=https://api.nowpayments.io/v1
+NOWPAYMENTS_IPN_CALLBACK_URL=https://hbl-e8cw.onrender.com/api/pagos/nowpayments/ipn/
+NOWPAYMENTS_TIMEOUT_SECONDS=15
 ```
 
-Usa una API key con permisos mínimos y **sin permiso de retiro**.
+No guardes estos secretos en Git ni en los campos del panel HBL.
 
-La validación automática usa:
+## Flujo de depósito
 
-```env
-TRONGRID_API_URL=https://api.trongrid.io
-TRONGRID_API_KEY=
-USDT_TRC20_CONTRACT=TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
+1. El usuario elige TRC20 o BEP20 e ingresa el monto.
+2. HBL crea una orden mediante `POST /v1/payment`.
+3. NOWPayments devuelve la dirección y el monto exactos.
+4. HBL recibe los cambios por IPN y vuelve a consultar `GET /v1/payment/{payment_id}` como comprobación independiente.
+5. El saldo se acredita únicamente cuando el proveedor responde `finished` y coinciden el ID de orden, la red, la moneda y el monto solicitado.
 
-BSC_RPC_URL=https://bsc-dataseed.bnbchain.org
-USDT_BEP20_CONTRACT=0x55d398326f99059ff775485246999027b3197955
-BSC_REQUIRED_CONFIRMATIONS=12
-CRYPTO_TX_MAX_AGE_MINUTES=30
-```
+`waiting`, `confirming`, `confirmed` y `sending` permanecen procesando. `partially_paid` o cualquier inconsistencia pasan a revisión manual. `failed`, `refunded` y `expired` no acreditan saldo.
 
-Para TRC20/BEP20 el usuario registra monto exacto y TXID. HBL valida existencia, estado, token, red, destino, monto, confirmaciones y unicidad del TXID antes de acreditar saldo.
+La firma IPN se valida con `x-nowpayments-sig`, HMAC-SHA512 y el secreto IPN. La acreditación es atómica e idempotente para impedir dobles créditos.
 
-## Transferencia bancaria
+## Reconciliación
 
-Puede configurarse desde **HBL Control → Métodos de pago** o mediante variables de Render:
-
-```env
-BANK_TRANSFER_DESTINATION=
-BANK_TRANSFER_NETWORK=
-BANK_TRANSFER_INSTRUCTIONS=
-```
-
-Si esas variables están vacías, el deploy conserva los datos bancarios ya guardados en la base de datos.
-
-La transferencia bancaria exige comprobante. La recarga queda `PENDING` hasta que administración la revise y apruebe.
-
-## Comportamiento en la app
-
-Los únicos métodos visibles para el usuario son TRC20, BEP20 y transferencia bancaria. Los métodos antiguos con historial se conservan únicamente como registros inactivos para no romper recargas anteriores; los que no tienen historial se eliminan durante el deploy.
-
-## Reconciliación cripto
+Además del IPN y de la consulta periódica en la billetera, administración puede ejecutar:
 
 ```bash
 python manage.py sync_crypto_deposits --limit 100
 ```
 
-También puede reintentar pendientes manuales:
+Para volver a consultar también los pagos parciales enviados a revisión:
 
 ```bash
 python manage.py sync_crypto_deposits --include-pending --limit 100
 ```
 
-## Seguridad
+## Revisión manual y retiros
 
-- Nunca guardes seed phrases, private keys, contraseñas de Binance ni códigos 2FA en HBL.
-- Nunca subas `.env` al repositorio.
-- Un TXID existente no basta: HBL exige token, destino y monto correctos.
-- El TXID es único en base de datos para evitar doble acreditación.
-- La transferencia bancaria nunca se acredita automáticamente solo por subir una imagen.
-- Mantén `DEBUG=False`, HTTPS y PostgreSQL en producción.
+Los depósitos pendientes pueden aprobarse o rechazarse desde `/control/recargas/`. Esa opción es un respaldo operativo y debe usarse solo tras comprobar el pago en NOWPayments.
+
+Los retiros aceptan únicamente direcciones USDT TRC20 (`T...`) o BEP20 (`0x...`). HBL detecta la red por la dirección, reserva el saldo y deja la solicitud pendiente; administración realiza el pago y registra la referencia manualmente.

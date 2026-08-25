@@ -347,6 +347,11 @@ class Deposit(models.Model):
     prepay_id = models.CharField(max_length=64, blank=True)
     checkout_url = models.URLField(max_length=600, blank=True)
     transaction_id = models.CharField(max_length=80, blank=True)
+    provider = models.CharField(max_length=32, blank=True, db_index=True)
+    provider_payment_id = models.CharField(max_length=80, blank=True, db_index=True)
+    provider_status = models.CharField(max_length=32, blank=True)
+    provider_price_amount = models.DecimalField(max_digits=18, decimal_places=8, default=Decimal("0.00000000"))
+    pay_address = models.CharField(max_length=255, blank=True)
     notes = models.TextField(blank=True)
     submitted_at = models.DateTimeField(auto_now_add=True)
     processed_at = models.DateTimeField(blank=True, null=True)
@@ -359,7 +364,12 @@ class Deposit(models.Model):
                 fields=["txid"],
                 condition=~models.Q(txid=""),
                 name="uniq_hbl_nonempty_txid",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["provider", "provider_payment_id"],
+                condition=~models.Q(provider_payment_id=""),
+                name="uniq_hbl_provider_payment_id",
+            ),
         ]
 
 

@@ -97,14 +97,8 @@ class Command(BaseCommand):
         )
 
         methods = [
-            (PaymentMethod.Kind.BANK, "Transferencia bancaria", config.base_currency_code, "", Decimal("1")),
-            (PaymentMethod.Kind.BINANCE_PAY, "Binance Pay automático", "USDT", "Binance Pay", Decimal(config.exchange_rate_usd_nio)),
-            (PaymentMethod.Kind.BINANCE_ID, "Binance Pay ID / Binance ID", "USDT", "Binance", Decimal(config.exchange_rate_usd_nio)),
             (PaymentMethod.Kind.USDT_TRC20, "USDT por TRC20", "USDT", "TRON (TRC20)", Decimal(config.exchange_rate_usd_nio)),
             (PaymentMethod.Kind.USDT_BEP20, "USDT por BEP20", "USDT", "BNB Smart Chain (BEP20)", Decimal(config.exchange_rate_usd_nio)),
-            (PaymentMethod.Kind.CRYPTO_OTHER, "Otra criptomoneda / red", "USDT", "Configurable", Decimal(config.exchange_rate_usd_nio)),
-            (PaymentMethod.Kind.REMITTANCE, "Giro / remesa", config.base_currency_code, "Agencia o proveedor configurable", Decimal("1")),
-            (PaymentMethod.Kind.MOBILE_WALLET, "Billetera móvil", config.base_currency_code, "Proveedor configurable", Decimal("1")),
         ]
         for kind, label, currency, network, rate in methods:
             PaymentMethod.objects.get_or_create(
@@ -113,14 +107,13 @@ class Command(BaseCommand):
                 defaults={
                     "currency": currency, "network": network, "active": False, "balance_rate": rate,
                     "min_amount": Decimal("100.00") if currency == "USDT" else (Decimal(config.minimum_deposit_usd) * Decimal(config.exchange_rate_usd_nio)).quantize(Decimal("0.01")),
-                    "require_proof": kind in {PaymentMethod.Kind.BANK, PaymentMethod.Kind.REMITTANCE, PaymentMethod.Kind.MOBILE_WALLET},
-                    "require_txid": kind in {PaymentMethod.Kind.BINANCE_ID, PaymentMethod.Kind.USDT_TRC20, PaymentMethod.Kind.USDT_BEP20, PaymentMethod.Kind.CRYPTO_OTHER},
+                    "require_proof": False,
+                    "require_txid": False,
+                    "instructions": "NOWPayments generará el monto y la dirección exactos para la orden.",
                 },
             )
 
         withdrawal_methods = [
-            ("bank", "Transferencia bancaria local", config.base_currency_code, "", "🏦", "Número de cuenta / IBAN", True, WithdrawalMethod.CurrencyMode.USER_LOCAL, WithdrawalMethod.IdentifierType.BANK, "Ej. número de cuenta o IBAN", "La salida se convierte a tu moneda local. Escribe la cuenta exactamente como aparece en tu banco."),
-            ("binance-id", "Binance Pay ID", "USDT", "Binance", "🟡", "Binance Pay ID", False, WithdrawalMethod.CurrencyMode.FIXED, WithdrawalMethod.IdentifierType.BINANCE_ID, "Ej. 123456789", "Solo el Binance Pay ID numérico del destinatario."),
             ("usdt-trc20", "USDT TRC20", "USDT", "TRON (TRC20)", "₮", "Dirección USDT TRC20", False, WithdrawalMethod.CurrencyMode.FIXED, WithdrawalMethod.IdentifierType.TRC20, "Ej. TAbc...", "Verifica que la dirección corresponda a USDT en TRC20."),
             ("usdt-bep20", "USDT BEP20", "USDT", "BNB Smart Chain (BEP20)", "₮", "Dirección USDT BEP20", False, WithdrawalMethod.CurrencyMode.FIXED, WithdrawalMethod.IdentifierType.BEP20, "Ej. 0xabc...", "Verifica que la dirección corresponda a USDT en BEP20/EVM."),
         ]
@@ -136,6 +129,27 @@ class Command(BaseCommand):
                     "active": True,
                 },
             )
+        WithdrawalMethod.objects.filter(slug="usdt-trc20").update(
+            currency_mode=WithdrawalMethod.CurrencyMode.FIXED,
+            currency="USDT",
+            country="",
+            network="TRON (TRC20)",
+            identifier_type=WithdrawalMethod.IdentifierType.TRC20,
+            holder_required=False,
+            active=True,
+        )
+        WithdrawalMethod.objects.filter(slug="usdt-bep20").update(
+            currency_mode=WithdrawalMethod.CurrencyMode.FIXED,
+            currency="USDT",
+            country="",
+            network="BNB Smart Chain (BEP20)",
+            identifier_type=WithdrawalMethod.IdentifierType.BEP20,
+            holder_required=False,
+            active=True,
+        )
+        WithdrawalMethod.objects.exclude(
+            slug__in=["usdt-trc20", "usdt-bep20"],
+        ).update(active=False)
 
         # No sobrescribir reglas de ruleta ya editadas desde HBL Control.
         WheelConfig.objects.get_or_create(pk=1)

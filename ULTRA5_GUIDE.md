@@ -22,7 +22,7 @@ El formulario solicita el monto en la moneda asociada al país del usuario. Ante
 Al confirmar, el servidor vuelve a validar todo y congela tasas/montos en el registro del retiro.
 
 ### Destinos de retiro
-El formulario cambia label, placeholder y ayuda según el método configurado. Se validan formatos de banco/IBAN, Binance ID, TRC20, BEP20/EVM, correo y teléfono.
+El formulario acepta únicamente direcciones USDT y detecta TRC20 (`T...`) o BEP20/EVM (`0x...`) por su formato.
 
 ### Música diaria
 Cada canción requiere el mayor valor entre:
@@ -79,9 +79,9 @@ La zona horaria detectada no puede alternarse libremente para generar días arti
 - limitación básica de intentos de login por identidad+IP.
 - saldo modificado mediante ledger/servicios atómicos.
 - retiro reserva saldo inmediatamente.
-- TXID manual único.
-- Binance se valida del lado servidor antes de acreditar.
-- webhooks Binance: firma + ventana temporal + consulta de orden.
+- Confirmación automática de NOWPayments con revisión manual de respaldo.
+- IPN de NOWPayments validado con firma HMAC-SHA512 y reconfirmación por API.
+- solo el estado final `finished` puede acreditar saldo automáticamente.
 - cambios de moneda base bloqueados después de actividad financiera.
 - archivos de comprobante limitados a imagen y 5 MB.
 - audios administrativos limitados a formatos permitidos y 25 MB.

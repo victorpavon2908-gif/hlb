@@ -1,5 +1,6 @@
 from django.contrib import admin, messages
 
+from .control_forms import PaymentMethodForm, WithdrawalMethodForm
 from .models import (
     AdminAuditLog,
     CurrencyRate,
@@ -25,6 +26,7 @@ from .models import (
     GiftRedemption,
 )
 from .services import HBLError, approve_deposit, mark_withdrawal_paid, reject_deposit, reject_withdrawal
+from .payment_policies import CRYPTO_DEPOSIT_KINDS, CRYPTO_WITHDRAWAL_SLUGS
 
 
 @admin.register(PlatformConfig)
@@ -80,20 +82,25 @@ class TrackAdmin(admin.ModelAdmin):
 
 @admin.register(PaymentMethod)
 class PaymentMethodAdmin(admin.ModelAdmin):
+    form = PaymentMethodForm
     list_display = ("label", "kind", "currency", "network", "min_amount", "max_amount", "balance_rate", "active", "sort_order")
     list_filter = ("kind", "active")
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(kind__in=CRYPTO_DEPOSIT_KINDS)
 
 
 @admin.register(Deposit)
 class DepositAdmin(admin.ModelAdmin):
-    list_display = ("id", "user", "payment_method", "amount", "currency", "status", "submitted_at")
+    list_display = ("id", "user", "payment_method", "provider_status", "amount", "currency", "status", "submitted_at")
     list_filter = ("status", "payment_method__kind")
-    search_fields = ("user__username", "user__email", "txid", "merchant_trade_no", "transaction_id")
+    search_fields = ("user__username", "user__email", "txid", "provider_payment_id", "merchant_trade_no", "transaction_id")
     readonly_fields = (
         "id", "user", "payment_method", "amount", "currency", "payment_amount",
         "payment_currency", "balance_rate", "status", "txid", "reference", "proof",
         "submitted_at", "processed_at", "merchant_trade_no", "prepay_id",
-        "checkout_url", "transaction_id",
+        "checkout_url", "transaction_id", "provider", "provider_payment_id",
+        "provider_status", "provider_price_amount", "pay_address",
     )
     actions = ("approve_selected", "reject_selected")
 
@@ -223,10 +230,14 @@ admin.site.index_title = "Operación de música, recompensas y pagos"
 
 @admin.register(WithdrawalMethod)
 class WithdrawalMethodAdmin(admin.ModelAdmin):
+    form = WithdrawalMethodForm
     list_display = ("name", "currency", "network", "min_amount_nio", "max_amount_nio", "fee_percent", "fee_fixed_nio", "active", "sort_order")
     list_editable = ("active", "sort_order")
     prepopulated_fields = {"slug": ("name",)}
     search_fields = ("name", "network")
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(slug__in=CRYPTO_WITHDRAWAL_SLUGS)
 
 
 @admin.register(WheelConfig)

@@ -2,15 +2,15 @@
 {% block title %}Retiros · HBL{% endblock %}
 {% block content %}
 <section class="page-title compact-title">
-  <span class="eyebrow">RETIROS MULTIMONEDA</span>
-  <h1>Retira en la moneda que corresponde.</h1>
-  <p>Escribes el monto en la moneda de tu país, <b>{{ preferred_currency }}</b>. HBL lo convierte a la moneda base <b>{{ config.base_currency_code }}</b> para contabilidad y después a la moneda real del método de retiro.</p>
+  <span class="eyebrow">RETIROS USDT</span>
+  <h1>Retira únicamente por TRC20 o BEP20.</h1>
+  <p>Escribes el monto en <b>{{ preferred_currency }}</b>; HBL calcula el equivalente en USDT. La red se detecta automáticamente al pegar la dirección y el pago queda sujeto a revisión manual.</p>
 </section>
 
 <section class="money-banner">
   <div><small>Saldo disponible</small><strong>{% if preferred_balance != None %}{{ preferred_balance }} {{ preferred_currency }}{% else %}— {{ preferred_currency }}{% endif %}</strong><span>Saldo contable: {{ config.base_currency_symbol }} {{ request.user.saldo }} {{ config.base_currency_code }}</span></div>
   <div><small>Mínimo global</small><strong>{% if withdrawal_min_preferred %}{{ withdrawal_min_preferred }} {{ preferred_currency }}{% else %}{{ config.base_currency_symbol }} {{ config.withdrawal_min }}{% endif %}</strong><span>{{ config.base_currency_symbol }} {{ config.withdrawal_min }} {{ config.base_currency_code }}</span></div>
-  <div><small>Tu país / moneda de retiro local</small><strong>{{ request.user.get_country_display }}</strong><span>{{ preferred_currency }} · zona {{ request.user.timezone_name|default:'UTC' }}</span></div>
+  <div><small>Moneda para indicar el monto</small><strong>{{ preferred_currency }}</strong><span>El pago final se realiza en USDT</span></div>
 </section>
 
 {% if not withdraw_currency_ready %}
@@ -23,7 +23,7 @@
     <span>{{ method.icon|default:'↗' }}</span>
     <div>
       <b>{{ method.name }}</b>
-      <small>{% if method.currency_mode == 'user_local' %}Paga en tu moneda local{% else %}Paga en {{ method.currency }}{% endif %}{% if method.network %} · {{ method.network }}{% endif %}</small>
+      <small>Paga en USDT{% if method.network %} · {{ method.network }}{% endif %}</small>
     </div>
   </div>
 {% empty %}<span class="muted">No hay métodos de retiro habilitados para tu país.</span>{% endfor %}
@@ -59,18 +59,17 @@
   </section>
 
   <section class="panel">
-    <div class="panel-heading"><div class="panel-icon">＋</div><div><span class="eyebrow">DESTINOS</span><h2>Agregar cuenta o wallet</h2></div></div>
-    <p class="muted">Solo aparecen métodos activos para tu país. El servidor valida el formato del dato antes de guardarlo.</p>
+    <div class="panel-heading"><div class="panel-icon">＋</div><div><span class="eyebrow">DESTINOS</span><h2>Agregar wallet USDT</h2></div></div>
+    <p class="muted">Pega una dirección que comience con <b>T</b> para TRC20 o con <b>0x</b> para BEP20. HBL detectará la red automáticamente.</p>
     <form method="post" class="form-stack" id="account-form" novalidate>
       {% csrf_token %}<input type="hidden" name="action" value="add_account">
       {{ account_form.non_field_errors }}
-      <div class="field-row"><label class="field-label" for="{{ account_form.withdrawal_method.id_for_label }}"><span>{{ account_form.withdrawal_method.label }}</span><span>Obligatorio</span></label>{{ account_form.withdrawal_method }}{{ account_form.withdrawal_method.errors }}</div>
+      <div class="field-row"><label class="field-label" for="{{ account_form.label.id_for_label }}"><span>{{ account_form.label.label }}</span><span>Ej. “Mi wallet”</span></label>{{ account_form.label }}{{ account_form.label.errors }}</div>
+      <div class="field-row"><label class="field-label" for="{{ account_form.holder_name.id_for_label }}"><span>{{ account_form.holder_name.label }}</span><span>Opcional</span></label>{{ account_form.holder_name }}{{ account_form.holder_name.errors }}</div>
+      <div class="field-row"><label class="field-label" for="{{ account_form.identifier.id_for_label }}"><span>{{ account_form.identifier.label }}</span><span>Obligatorio</span></label>{{ account_form.identifier }}<small id="identifier-help-text">Red pendiente de detectar.</small>{{ account_form.identifier.errors }}</div>
       <div id="withdrawal-method-hint" class="method-hint" hidden></div>
-      <div class="field-row"><label class="field-label" for="{{ account_form.label.id_for_label }}"><span>{{ account_form.label.label }}</span><span>Ej. “Mi banco”</span></label>{{ account_form.label }}{{ account_form.label.errors }}</div>
-      <div class="field-row" id="holder-field-label"><label class="field-label" for="{{ account_form.holder_name.id_for_label }}"><span>{{ account_form.holder_name.label }}</span><span id="holder-required-text">Según método</span></label>{{ account_form.holder_name }}{{ account_form.holder_name.errors }}</div>
-      <div class="field-row" id="identifier-field-label"><label class="field-label" for="{{ account_form.identifier.id_for_label }}"><span id="identifier-label-text">{{ account_form.identifier.label }}</span><span>Se valida</span></label>{{ account_form.identifier }}<small id="identifier-help-text">Selecciona un método para ver el formato correcto.</small>{{ account_form.identifier.errors }}</div>
       <label class="check-label">{{ account_form.is_default }} <span>{{ account_form.is_default.label }}</span></label>{{ account_form.is_default.errors }}
-      <div class="form-policy"><b>Seguridad.</b> Verifica banco, red y dirección antes de guardar. HBL nunca te pedirá una frase semilla, clave privada ni contraseña de Binance en este formulario.</div>
+      <div class="form-policy"><b>Seguridad.</b> Verifica la dirección antes de guardar. HBL nunca te pedirá frase semilla, clave privada, contraseña ni código 2FA.</div>
       <button class="secondary-btn" type="submit">Guardar destino</button>
     </form>
   </section>
@@ -92,42 +91,35 @@
   </tbody></table></div>
 </section>
 
-{{ withdrawal_methods_data|json_script:"withdrawal-methods-json" }}
 {{ withdrawal_accounts_data|json_script:"withdrawal-accounts-json" }}
 {% endblock %}
 {% block scripts %}
 <script>
 (() => {
-  const methodSelect = document.getElementById('id_withdrawal_method');
   const identifier = document.getElementById('id_identifier');
-  const holder = document.getElementById('id_holder_name');
-  const identifierLabel = document.getElementById('identifier-label-text');
   const identifierHelp = document.getElementById('identifier-help-text');
-  const holderRequired = document.getElementById('holder-required-text');
   const hint = document.getElementById('withdrawal-method-hint');
-  const methodsNode = document.getElementById('withdrawal-methods-json');
   const accountsNode = document.getElementById('withdrawal-accounts-json');
-  const methods = methodsNode ? JSON.parse(methodsNode.textContent || '[]') : [];
   const accounts = accountsNode ? JSON.parse(accountsNode.textContent || '[]') : [];
 
-  const updateMethodFields = () => {
-    if (!methodSelect) return;
-    const item = methods.find(x => String(x.id) === methodSelect.value);
-    if (!item) { if (hint) hint.hidden = true; return; }
-    if (identifierLabel) identifierLabel.textContent = item.account_label || 'Cuenta / dirección / ID';
-    if (identifier) identifier.placeholder = item.identifier_placeholder || item.account_label || 'Ingresa el destino';
-    if (identifierHelp) identifierHelp.textContent = item.identifier_help || 'Escribe el dato exactamente como aparece en el proveedor.';
-    if (holder) holder.required = !!item.holder_required;
-    if (holderRequired) holderRequired.textContent = item.holder_required ? 'Obligatorio' : 'Opcional';
+  const detectWalletNetwork = () => {
+    const value = (identifier?.value || '').trim();
+    let network = '';
+    if (/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(value)) network = 'TRC20';
+    else if (/^0x[a-fA-F0-9]{40}$/.test(value)) network = 'BEP20';
+    if (identifierHelp) identifierHelp.textContent = network
+      ? `Red ${network} detectada automáticamente.`
+      : 'Usa una dirección TRC20 (T...) o BEP20 (0x...).';
     if (hint) {
-      hint.hidden = !(item.instructions || item.network || item.payout_currency);
+      hint.hidden = !network;
       hint.replaceChildren();
-      const strong = document.createElement('b'); strong.textContent = `${item.name} · pago en ${item.payout_currency}`; hint.appendChild(strong);
-      if (item.network) { const span = document.createElement('span'); span.textContent = `Red/proveedor: ${item.network}`; hint.appendChild(span); }
-      if (item.instructions) { const span = document.createElement('span'); span.textContent = item.instructions; hint.appendChild(span); }
+      if (network) {
+        const strong = document.createElement('b'); strong.textContent = `${network} detectada`; hint.appendChild(strong);
+        const span = document.createElement('span'); span.textContent = 'El servidor volverá a validar el formato antes de guardar.'; hint.appendChild(span);
+      }
     }
   };
-  methodSelect?.addEventListener('change', updateMethodFields); updateMethodFields();
+  identifier?.addEventListener('input', detectWalletNetwork); detectWalletNetwork();
 
   const accountSelect = document.getElementById('id_payout_account');
   const amountInput = document.getElementById('id_amount');

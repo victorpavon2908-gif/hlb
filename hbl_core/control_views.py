@@ -50,6 +50,7 @@ from .models import (
     GiftCode,
     GiftRedemption,
 )
+from .payment_policies import CRYPTO_DEPOSIT_KINDS, CRYPTO_WITHDRAWAL_SLUGS
 from .services import (
     HBLError,
     activate_membership_admin,
@@ -335,14 +336,20 @@ def withdrawal_action(request, withdrawal_id, action):
 
 @staff_member_required(login_url="hbl_login")
 def payment_methods(request, method_id=None):
-    instance = get_object_or_404(PaymentMethod, pk=method_id) if method_id else None
+    instance = get_object_or_404(
+        PaymentMethod, pk=method_id, kind__in=CRYPTO_DEPOSIT_KINDS,
+    ) if method_id else None
     form = PaymentMethodForm(request.POST or None, instance=instance)
     if request.method == "POST" and form.is_valid():
         obj = form.save()
         _audit(request, "payment_method_saved", obj, {"kind": obj.kind, "currency": obj.currency})
         messages.success(request, "Método de pago guardado.")
         return redirect("hbl_control_payment_methods")
-    return render(request, "hbl/control/payment_methods.html", {"form": form, "editing": instance, "items": PaymentMethod.objects.all()})
+    return render(request, "hbl/control/payment_methods.html", {
+        "form": form,
+        "editing": instance,
+        "items": PaymentMethod.objects.filter(kind__in=CRYPTO_DEPOSIT_KINDS),
+    })
 
 
 @staff_member_required(login_url="hbl_login")
@@ -508,7 +515,9 @@ def ledger_export(request):
 
 @staff_member_required(login_url="hbl_login")
 def withdrawal_methods(request, method_id=None):
-    instance = get_object_or_404(WithdrawalMethod, pk=method_id) if method_id else None
+    instance = get_object_or_404(
+        WithdrawalMethod, pk=method_id, slug__in=CRYPTO_WITHDRAWAL_SLUGS,
+    ) if method_id else None
     form = WithdrawalMethodForm(request.POST or None, instance=instance)
     if request.method == "POST" and form.is_valid():
         obj = form.save()
@@ -519,7 +528,8 @@ def withdrawal_methods(request, method_id=None):
         messages.success(request, "Método de retiro guardado.")
         return redirect("hbl_control_withdrawal_methods")
     return render(request, "hbl/control/withdrawal_methods.html", {
-        "form": form, "editing": instance, "items": WithdrawalMethod.objects.all(),
+        "form": form, "editing": instance,
+        "items": WithdrawalMethod.objects.filter(slug__in=CRYPTO_WITHDRAWAL_SLUGS),
         "config": PlatformConfig.get_solo(),
     })
 

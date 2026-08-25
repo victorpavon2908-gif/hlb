@@ -3,31 +3,60 @@
 {% block content %}
 <section class="page-title compact-title">
   <span class="eyebrow">HBL WALLET · RECARGAS</span>
-  <h1>TRC20, BEP20 o transferencia bancaria.</h1>
+  <h1>Deposita USDT por TRC20 o BEP20.</h1>
   <p>
     Depósito mínimo global: <b>US$ {{ config.minimum_deposit_usd }}</b> · equivalente actual
     {{ config.base_currency_symbol }} {{ minimum_deposit_nio }} {{ config.base_currency_code }}.
-    En USDT, HBL valida el TXID automáticamente; en transferencia bancaria, administración valida el comprobante.
+    NOWPayments detecta el pago y HBL acredita el saldo solamente después de la confirmación final.
   </p>
 </section>
+
+{% if active_payment %}
+<section class="panel glass-card space-bottom">
+  <div class="panel-heading">
+    <div class="panel-icon">₮</div>
+    <div><span class="eyebrow">ORDEN ACTIVA</span><h2>Completa tu depósito</h2></div>
+  </div>
+  <div class="form-policy">
+    <b>Envía exactamente {{ active_payment.payment_amount }} USDT por {{ active_payment.payment_method.network }}.</b>
+    No uses otra moneda ni otra red. HBL actualizará el estado automáticamente.
+  </div>
+  <div class="method-card rich-method">
+    <div class="method-icon">↓</div>
+    <div>
+      <strong>{{ active_payment.payment_amount }} USDT</strong>
+      <span>{{ active_payment.payment_method.label }} · NOWPayments #{{ active_payment.provider_payment_id }}</span>
+      <code id="active-payment-address">{{ active_payment.pay_address }}</code>
+      <button class="secondary-btn" type="button" data-copy="#active-payment-address" style="width:max-content;min-height:32px;padding:6px 10px;margin-top:5px">
+        Copiar dirección
+      </button>
+      <small>Estado del proveedor: {{ active_payment.provider_status|default:'waiting' }}</small>
+    </div>
+  </div>
+</section>
+{% endif %}
 
 <div class="two-col wallet-grid">
   <section class="panel glass-card">
     <div class="panel-heading">
       <div class="panel-icon">↓</div>
-      <div><span class="eyebrow">NUEVA RECARGA</span><h2>Selecciona tu método de pago</h2></div>
+      <div><span class="eyebrow">NUEVA RECARGA</span><h2>Genera una orden de pago</h2></div>
     </div>
 
-    <form method="post" enctype="multipart/form-data" class="form-stack" novalidate>
+    {% if not nowpayments_ready %}
+    <div class="form-policy">
+      <b>Depósitos temporalmente no disponibles.</b>
+      La integración segura con NOWPayments aún no está configurada.
+    </div>
+    {% endif %}
+
+    <form method="post" class="form-stack" novalidate>
       {% csrf_token %}
       {{ form.non_field_errors }}
       {% for field in form %}
       <div class="field-row">
         <label class="field-label" for="{{ field.id_for_label }}">
-          <span>{{ field.label }}</span>
-          <span>
-            {% if field.name == 'txid' or field.name == 'proof' %}Según método{% elif field.field.required %}Obligatorio{% else %}Opcional{% endif %}
-          </span>
+          <span>{{ field.label }}</span><span>Obligatorio</span>
         </label>
         {{ field }}
         {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
@@ -36,56 +65,43 @@
       {% endfor %}
 
       <div class="form-policy">
-        <b>Cómo se valida cada método.</b>
-        Para TRC20/BEP20 pega el TXID real y escribe exactamente el monto enviado; HBL valida token USDT, red, destino, monto, estado y confirmaciones.
-        Para transferencia bancaria sube el comprobante; la recarga queda pendiente hasta aprobación administrativa.
+        <b>Validación automática con respaldo manual.</b>
+        Elige TRC20 o BEP20 y el monto. NOWPayments generará la dirección y el importe exacto; no necesitas pegar un TXID ni subir un comprobante. Los pagos parciales o inconsistentes pasan a revisión administrativa sin acreditarse automáticamente.
       </div>
 
-      <button class="primary-btn glow-btn" type="submit">Registrar recarga</button>
+      <button class="primary-btn glow-btn" type="submit" {% if not nowpayments_ready %}disabled{% endif %}>Generar dirección de depósito</button>
     </form>
   </section>
 
   <section class="panel">
     <div class="section-head compact">
-      <div><span class="eyebrow">MÉTODOS DISPONIBLES</span><h2>Opciones de depósito</h2></div>
+      <div><span class="eyebrow">REDES DISPONIBLES</span><h2>Opciones de depósito</h2></div>
     </div>
 
     {% for method in methods %}
     <div class="method-card rich-method">
-      <div class="method-icon">{% if method.kind == 'bank' %}🏦{% else %}₮{% endif %}</div>
+      <div class="method-icon">₮</div>
       <div>
         <strong>{{ method.label }}</strong>
         <span>{{ method.currency }} · {{ method.network }}</span>
         <small>
           Mín. {{ method.min_amount }} {{ method.currency }}
           {% if method.max_amount > 0 %} · Máx. {{ method.max_amount }} {{ method.currency }}{% endif %}
-          {% if method.kind == 'bank' %}
-            · comprobante obligatorio · revisión administrativa
-          {% else %}
-            · TXID obligatorio · validación automática
-          {% endif %}
+          · detección automática · revisión manual disponible
         </small>
-        {% if method.destination %}
-          <code id="payment-destination-{{ method.id }}">{{ method.destination }}</code>
-          <button class="secondary-btn" type="button" data-copy="#payment-destination-{{ method.id }}" style="width:max-content;min-height:32px;padding:6px 10px;margin-top:5px">
-            {% if method.kind == 'bank' %}Copiar cuenta{% else %}Copiar dirección{% endif %}
-          </button>
-        {% else %}
-          <p class="muted">Destino pendiente de configuración administrativa.</p>
-        {% endif %}
         {% if method.instructions %}<p>{{ method.instructions }}</p>{% endif %}
       </div>
     </div>
     {% empty %}
     <div class="form-policy">
-      <b>No hay métodos configurados.</b>
-      Deben estar disponibles TRC20, BEP20 y transferencia bancaria.
+      <b>No hay redes activas.</b>
+      Administración debe configurar la API y el secreto IPN de NOWPayments.
     </div>
     {% endfor %}
 
     <div class="form-policy space-top">
       <b>Importante.</b>
-      En cripto usa exactamente la red indicada. En transferencia bancaria verifica cuenta, titular y referencia antes de enviar fondos.
+      Envía únicamente USDT y usa exactamente la red indicada. Una red incorrecta puede ocasionar la pérdida de los fondos.
       Nunca compartas frases semilla, claves privadas ni códigos 2FA.
     </div>
   </section>
@@ -99,7 +115,7 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Fecha</th><th>Método</th><th>Enviado</th><th>Saldo HBL</th><th>Estado</th><th>Validación</th></tr>
+        <tr><th>Fecha</th><th>Método</th><th>Solicitado</th><th>Saldo HBL</th><th>Estado</th><th>Validación</th></tr>
       </thead>
       <tbody>
         {% for dep in deposits %}
@@ -111,18 +127,17 @@
           <td><span class="status {{ dep.status }}">{{ dep.get_status_display }}</span></td>
           <td>
             {% if dep.status == 'processing' %}
-              <span class="muted">Esperando confirmación automática</span>
-            {% elif dep.status == 'pending' and dep.payment_method.kind == 'bank' %}
-              <span class="muted">Comprobante pendiente de revisión</span>
+              <span class="muted">Esperando confirmación final de NOWPayments</span>
             {% elif dep.status == 'pending' %}
               <span class="muted">Revisión manual requerida</span>
             {% elif dep.status == 'approved' %}
               <span class="positive">Confirmada y acreditada</span>
             {% elif dep.status == 'rejected' %}
-              <span class="negative">Rechazada</span>
-            {% else %}
-              <span class="muted">—</span>
+              <span class="negative">Rechazada, sin acreditar</span>
+            {% elif dep.status == 'expired' %}
+              <span class="muted">Orden expirada</span>
             {% endif %}
+            {% if dep.provider_payment_id %}<small class="muted">NOWPayments #{{ dep.provider_payment_id }} · {{ dep.provider_status }}</small>{% endif %}
             {% if dep.notes %}<small class="muted">{{ dep.notes|truncatechars:150 }}</small>{% endif %}
           </td>
         </tr>
@@ -153,9 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.location.reload();
         return;
       }
-      if (data.processing > 0) {
-        window.setTimeout(poll, 10000);
-      }
+      if (data.processing > 0) window.setTimeout(poll, 10000);
     } catch (_) {
       if (attempts < maxAttempts) window.setTimeout(poll, 15000);
     }

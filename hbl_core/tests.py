@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from .forms import DepositForm, RegistrationForm
+from .forms import DepositForm, PayoutAccountForm, RegistrationForm
 from .models import (
     CurrencyRate,
     Deposit,
@@ -103,13 +103,17 @@ class HBLCoreTests(TestCase):
         self.assertEqual(self.user.saldo, Decimal("1460.00"))
 
     def test_withdrawal_method_controls_minimum_and_fee(self):
-        method = WithdrawalMethod.objects.create(
-            name="Binance", slug="binance-test", currency="USDT", network="Binance",
-            min_amount_nio=Decimal("50"), fee_percent=Decimal("10"), active=True,
+        method, _ = WithdrawalMethod.objects.update_or_create(
+            slug="usdt-trc20",
+            defaults={
+                "name": "USDT TRC20", "currency": "USDT", "network": "TRON (TRC20)",
+                "identifier_type": WithdrawalMethod.IdentifierType.TRC20,
+                "min_amount_nio": Decimal("50"), "fee_percent": Decimal("10"), "active": True,
+            },
         )
         account = PayoutAccount.objects.create(
-            user=self.user, withdrawal_method=method, kind=PayoutAccount.Kind.CUSTOM,
-            label="Binance", identifier="123456",
+            user=self.user, withdrawal_method=method, kind=PayoutAccount.Kind.USDT_TRC20,
+            label="TRC20", identifier="TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE",
         )
         with self.assertRaises(HBLError):
             request_withdrawal(self.user.id, account, Decimal("49"))
@@ -128,33 +132,40 @@ class HBLCoreTests(TestCase):
         self.user.preferred_currency = "USD"
         self.user.save(update_fields=["preferred_currency"])
         self.assertEqual(self.user.country_currency, "NIO")
-        method = WithdrawalMethod.objects.create(
-            name="Banco local", slug="bank-local-test",
-            currency_mode=WithdrawalMethod.CurrencyMode.USER_LOCAL, currency="NIO",
-            country="NI", identifier_type=WithdrawalMethod.IdentifierType.BANK,
-            min_amount_nio=Decimal("0"), fee_percent=Decimal("5"), active=True,
+        method, _ = WithdrawalMethod.objects.update_or_create(
+            slug="usdt-bep20",
+            defaults={
+                "name": "USDT BEP20", "currency_mode": WithdrawalMethod.CurrencyMode.FIXED,
+                "currency": "USDT", "network": "BNB Smart Chain (BEP20)", "country": "",
+                "identifier_type": WithdrawalMethod.IdentifierType.BEP20,
+                "min_amount_nio": Decimal("0"), "fee_percent": Decimal("5"), "active": True,
+            },
         )
         account = PayoutAccount.objects.create(
-            user=self.user, withdrawal_method=method, kind=PayoutAccount.Kind.CUSTOM,
-            label="Mi banco", identifier="123456789", holder_name="Usuario Prueba",
+            user=self.user, withdrawal_method=method, kind=PayoutAccount.Kind.USDT_BEP20,
+            label="Mi wallet", identifier="0x1111111111111111111111111111111111111111",
         )
         with self.assertRaises(HBLError):
             request_withdrawal(self.user.id, account, Decimal("499"), requested_currency=self.user.country_currency)
         wd = request_withdrawal(self.user.id, account, Decimal("600"), requested_currency=self.user.country_currency)
         self.assertEqual(wd.requested_currency, "NIO")
-        self.assertEqual(wd.payout_currency, "NIO")
+        self.assertEqual(wd.payout_currency, "USDT")
         self.assertEqual(wd.amount, Decimal("600.00"))
         self.assertEqual(wd.fee, Decimal("30.00"))
-        self.assertEqual(wd.payout_amount, Decimal("570.00000000"))
+        self.assertEqual(wd.payout_amount, Decimal("15.56526488"))
 
     def test_fixed_withdrawal_method_pays_in_method_currency(self):
         cfg = PlatformConfig.get_solo()
         cfg.withdrawal_min = Decimal("500.00")
         cfg.save(update_fields=["withdrawal_min"])
-        method = WithdrawalMethod.objects.create(
-            name="USDT TRC20", slug="usdt-trc20-test",
-            currency_mode=WithdrawalMethod.CurrencyMode.FIXED, currency="USDT", network="TRC20",
-            identifier_type=WithdrawalMethod.IdentifierType.TRC20, fee_percent=Decimal("0"), active=True,
+        method, _ = WithdrawalMethod.objects.update_or_create(
+            slug="usdt-trc20",
+            defaults={
+                "name": "USDT TRC20", "currency_mode": WithdrawalMethod.CurrencyMode.FIXED,
+                "currency": "USDT", "network": "TRC20",
+                "identifier_type": WithdrawalMethod.IdentifierType.TRC20,
+                "fee_percent": Decimal("0"), "active": True,
+            },
         )
         account = PayoutAccount.objects.create(
             user=self.user, withdrawal_method=method, kind=PayoutAccount.Kind.CUSTOM,
@@ -167,13 +178,44 @@ class HBLCoreTests(TestCase):
 
     def test_global_deposit_minimum_is_usd_100_equivalent(self):
         method = PaymentMethod.objects.create(
-            kind=PaymentMethod.Kind.BANK, label="Bank", currency="NIO",
-            min_amount=Decimal("1"), balance_rate=Decimal("1"), active=True,
+            kind=PaymentMethod.Kind.USDT_TRC20, label="USDT TRC20", currency="USDT",
+            min_amount=Decimal("1"), balance_rate=Decimal("36.62"), require_txid=True, active=True,
         )
-        low = DepositForm(data={"payment_method": method.id, "payment_amount": "3000"})
+        low = DepositForm(data={"payment_method": method.id, "payment_amount": "99", "txid": "a" * 64})
         self.assertFalse(low.is_valid())
-        ok = DepositForm(data={"payment_method": method.id, "payment_amount": "3662"})
+        ok = DepositForm(data={"payment_method": method.id, "payment_amount": "100", "txid": "b" * 64})
         self.assertTrue(ok.is_valid(), ok.errors)
+
+    def test_wallet_network_is_detected_from_address(self):
+        trc, _ = WithdrawalMethod.objects.update_or_create(
+            slug="usdt-trc20",
+            defaults={
+                "name": "USDT TRC20", "currency": "USDT", "network": "TRON (TRC20)",
+                "identifier_type": WithdrawalMethod.IdentifierType.TRC20,
+                "holder_required": False, "active": True,
+            },
+        )
+        form = PayoutAccountForm(data={
+            "label": "Mi TRC20",
+            "holder_name": "",
+            "identifier": "TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE",
+            "is_default": "on",
+        }, user=self.user)
+        self.assertTrue(form.is_valid(), form.errors)
+        account = form.save(commit=False)
+        self.assertEqual(account.withdrawal_method, trc)
+        self.assertEqual(account.network, "TRON (TRC20)")
+
+    def test_non_crypto_withdrawal_method_is_rejected(self):
+        method = WithdrawalMethod.objects.create(
+            name="Banco", slug="bank-test", currency="NIO", active=True,
+        )
+        account = PayoutAccount.objects.create(
+            user=self.user, withdrawal_method=method, kind=PayoutAccount.Kind.BANK,
+            label="Banco", identifier="123456789",
+        )
+        with self.assertRaisesMessage(HBLError, "Solo se permiten retiros USDT"):
+            request_withdrawal(self.user.id, account, Decimal("100"), requested_currency="NIO")
 
     def test_manual_deposit_approval_only_credits_once(self):
         method = PaymentMethod.objects.create(kind=PaymentMethod.Kind.BANK, label="Bank 2", currency="NIO")

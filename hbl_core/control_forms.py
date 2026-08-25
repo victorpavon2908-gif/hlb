@@ -8,6 +8,11 @@ from django.core.exceptions import ValidationError
 from accounts.countries import COUNTRY_CHOICES
 from accounts.currencies import CURRENCY_CHOICES, PAYMENT_CURRENCY_CHOICES
 from .forms import normalize_phone
+from .payment_policies import (
+    CRYPTO_DEPOSIT_KINDS,
+    CRYPTO_WITHDRAWAL_IDENTIFIER_TYPES,
+    CRYPTO_WITHDRAWAL_SLUGS,
+)
 from .models import (
     CurrencyRate,
     GiftCode,
@@ -32,7 +37,7 @@ PLACEHOLDERS = {
     "network": "Ej. TRC20, BEP20, Banco X",
     "destination": "Cuenta, wallet o identificador receptor",
     "instructions": "Instrucciones visibles para el cliente",
-    "account_label": "Ej. Binance Pay ID",
+    "account_label": "Ej. Dirección USDT",
     "identifier_placeholder": "Ej. 123456789 o TAbc...",
     "identifier_help": "Explica exactamente qué dato debe ingresar el cliente",
     "badge": "Ej. Recomendado",
@@ -138,48 +143,104 @@ class TrackForm(ControlModelForm):
 class PaymentMethodForm(ControlModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["currency"].widget = forms.Select(choices=PAYMENT_CURRENCY_CHOICES, attrs={"class": "control-input"})
-        self.fields["currency"].choices = PAYMENT_CURRENCY_CHOICES
+        self.fields["kind"].choices = [
+            choice for choice in PaymentMethod.Kind.choices
+            if choice[0] in CRYPTO_DEPOSIT_KINDS
+        ]
+        self.fields["currency"].widget = forms.Select(
+            choices=[("USDT", "USDT — Tether")], attrs={"class": "control-input"},
+        )
+        self.fields["currency"].choices = [("USDT", "USDT — Tether")]
+
+    def clean(self):
+        cleaned = super().clean()
+        kind = cleaned.get("kind")
+        network = {
+            PaymentMethod.Kind.USDT_TRC20: "TRON (TRC20)",
+            PaymentMethod.Kind.USDT_BEP20: "BNB Smart Chain (BEP20)",
+        }.get(kind)
+        if kind not in CRYPTO_DEPOSIT_KINDS or not network:
+            self.add_error("kind", "Solo se permiten USDT TRC20 y USDT BEP20.")
+        else:
+            cleaned["network"] = network
+        cleaned["currency"] = "USDT"
+        return cleaned
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.destination = ""
+        instance.require_txid = False
+        instance.require_proof = False
+        if commit:
+            instance.save()
+        return instance
 
     class Meta:
         model = PaymentMethod
         fields = [
-            "kind", "label", "currency", "network", "destination", "instructions",
-            "min_amount", "max_amount", "balance_rate", "require_proof", "require_txid",
-            "active", "sort_order",
+            "kind", "label", "currency", "network", "instructions", "min_amount",
+            "max_amount", "balance_rate", "active", "sort_order",
         ]
         labels = {
             "kind": "Tipo", "label": "Nombre visible", "currency": "Moneda recibida",
-            "network": "Red / proveedor", "destination": "Cuenta / wallet de destino",
+            "network": "Red",
             "instructions": "Instrucciones para el usuario", "min_amount": "Mínimo del método",
             "max_amount": "Máximo del método (0 = sin máximo)", "balance_rate": "Unidades de moneda base por unidad recibida",
-            "require_proof": "Exigir comprobante", "require_txid": "Exigir TXID / referencia",
             "active": "Método activo", "sort_order": "Orden",
         }
         help_texts = {
             "balance_rate": "Debe coincidir con la tasa real usada para acreditar saldo. Para monedas administradas en Monedas y tasas, mantén ambas coherentes.",
-            "destination": "Nunca publiques claves privadas, secretos API ni frases semilla en este campo.",
         }
 
 
 class WithdrawalMethodForm(ControlModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["currency"].widget = forms.Select(choices=PAYMENT_CURRENCY_CHOICES, attrs={"class": "control-input"})
-        self.fields["currency"].choices = PAYMENT_CURRENCY_CHOICES
-        self.fields["country"].widget = forms.Select(choices=[("", "Todos los países")] + list(COUNTRY_CHOICES), attrs={"class": "control-input"})
-        self.fields["country"].choices = [("", "Todos los países")] + list(COUNTRY_CHOICES)
+        self.fields["identifier_type"].choices = [
+            choice for choice in WithdrawalMethod.IdentifierType.choices
+            if choice[0] in CRYPTO_WITHDRAWAL_IDENTIFIER_TYPES
+        ]
+
+    def clean(self):
+        cleaned = super().clean()
+        identifier_type = cleaned.get("identifier_type") or getattr(
+            self.instance, "identifier_type", "",
+        )
+        current_slug = cleaned.get("slug") or getattr(self.instance, "slug", "")
+        expected_slug = {
+            WithdrawalMethod.IdentifierType.TRC20: "usdt-trc20",
+            WithdrawalMethod.IdentifierType.BEP20: "usdt-bep20",
+        }.get(identifier_type)
+        if not expected_slug:
+            if "identifier_type" in self.fields:
+                self.add_error("identifier_type", "Solo se permiten wallets TRC20 y BEP20.")
+        elif current_slug != expected_slug and "slug" in self.fields:
+            self.add_error("slug", f"Para esta red el identificador debe ser {expected_slug}.")
+        elif "network" in self.fields:
+            cleaned["network"] = (
+                "TRON (TRC20)" if expected_slug == "usdt-trc20"
+                else "BNB Smart Chain (BEP20)"
+            )
+        return cleaned
+
+    def save(self, commit=True):
+        obj = super().save(commit=False)
+        obj.currency_mode = WithdrawalMethod.CurrencyMode.FIXED
+        obj.currency = "USDT"
+        obj.country = ""
+        if commit:
+            obj.save()
+        return obj
 
     class Meta:
         model = WithdrawalMethod
         fields = [
-            "name", "slug", "country", "currency_mode", "currency", "network", "icon", "instructions",
+            "name", "slug", "network", "icon", "instructions",
             "account_label", "identifier_type", "identifier_placeholder", "identifier_help", "holder_required",
             "min_amount_nio", "max_amount_nio", "fee_percent", "fee_fixed_nio", "active", "sort_order",
         ]
         labels = {
-            "name": "Nombre visible", "slug": "Identificador interno", "country": "País permitido",
-            "currency_mode": "Cómo se determina la moneda de pago", "currency": "Moneda fija del método",
+            "name": "Nombre visible", "slug": "Identificador interno",
             "network": "Red / proveedor", "icon": "Icono", "instructions": "Instrucciones para el cliente",
             "account_label": "Etiqueta del campo de destino", "identifier_type": "Tipo de dato / validación",
             "identifier_placeholder": "Ejemplo mostrado al cliente", "identifier_help": "Ayuda debajo del campo",
@@ -188,9 +249,8 @@ class WithdrawalMethodForm(ControlModelForm):
             "fee_fixed_nio": "Comisión fija en moneda base", "active": "Disponible para usuarios", "sort_order": "Orden",
         }
         help_texts = {
-            "currency_mode": "Moneda local usa la moneda asociada al país de la cuenta; moneda fija usa el código seleccionado.",
-            "country": "Déjalo en Todos los países para un método global como Binance/USDT.",
-            "identifier_type": "HBL aplicará validación del lado servidor según el tipo elegido.",
+            "slug": f"Solo se admiten: {', '.join(CRYPTO_WITHDRAWAL_SLUGS)}.",
+            "identifier_type": "HBL detectará y validará automáticamente la red por el formato de la dirección.",
             "min_amount_nio": "Se aplica el mayor entre este mínimo y el mínimo global.",
         }
 
@@ -223,7 +283,7 @@ class PlatformConfigForm(ControlModelForm):
             "maintenance_mode": "Modo mantenimiento", "legal_notice": "Aviso / términos visibles",
         }
         help_texts = {
-            "withdrawal_min": "Valor inicial recomendado: 500. El cliente ve el equivalente en su moneda local y en la moneda del método.",
+            "withdrawal_min": "Valor inicial recomendado: 500. El cliente ve el equivalente antes de recibir USDT.",
             "referral_first_deposit_percent": "No se paga en la segunda ni en recargas posteriores.",
             "listen_verification_seconds": "Valor solicitado: 10 segundos. El servidor valida tiempo efectivo, no solo el botón del navegador.",
         }

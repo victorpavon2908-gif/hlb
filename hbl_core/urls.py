@@ -10,6 +10,7 @@ urlpatterns = [
     path("planes/", views.plans, name="hbl_plans"),
     path("billetera/", payment_views.wallet, name="hbl_wallet"),
     path("api/billetera/revalidar/", payment_views.recheck_crypto_deposits, name="hbl_crypto_recheck"),
+    path("api/pagos/nowpayments/ipn/", payment_views.nowpayments_ipn, name="hbl_nowpayments_ipn"),
     path("retiros/", views.withdrawals, name="hbl_withdrawals"),
     path("referidos/", views.referrals, name="hbl_referrals"),
     path("ruleta/", views.wheel, name="hbl_wheel"),

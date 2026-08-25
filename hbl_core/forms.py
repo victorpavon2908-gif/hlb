@@ -7,17 +7,18 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
-from django.db.models import Q
 
 from accounts.calling_codes import CALLING_CODES
 from accounts.countries import COUNTRY_CHOICES
 from accounts.currencies import CURRENCY_CHOICES
-from .models import CurrencyRate, Deposit, PaymentMethod, PayoutAccount, PlatformConfig, WithdrawalMethod
+from .models import CurrencyRate, PaymentMethod, PayoutAccount, PlatformConfig, WithdrawalMethod
+from .payment_policies import (
+    CRYPTO_DEPOSIT_KINDS,
+    CRYPTO_WITHDRAWAL_SLUGS,
+    detect_usdt_withdrawal_network,
+)
 
 User = get_user_model()
-MAX_PROOF_BYTES = 5 * 1024 * 1024
-
-
 def normalize_phone(value, country):
     value = re.sub(r"[\s().-]", "", (value or "").strip())
     if not value:
@@ -155,39 +156,25 @@ class RegistrationForm(forms.Form):
 
 
 class DepositForm(forms.Form):
-    payment_method = forms.ModelChoiceField(queryset=PaymentMethod.objects.none(), label="Forma de recarga")
-    payment_amount = forms.DecimalField(label="Monto enviado", min_value=Decimal("0.00000001"), max_digits=18, decimal_places=8)
-    txid = forms.CharField(label="TXID / referencia", max_length=180, required=False)
-    reference = forms.CharField(label="Referencia adicional", max_length=180, required=False)
-    proof = forms.ImageField(label="Comprobante", required=False, help_text="JPG/PNG/WebP. Máximo 5 MB.")
+    payment_method = forms.ModelChoiceField(queryset=PaymentMethod.objects.none(), label="Red de depósito")
+    payment_amount = forms.DecimalField(label="Monto a depositar (USDT)", min_value=Decimal("0.00000001"), max_digits=18, decimal_places=8)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["payment_method"].queryset = PaymentMethod.objects.filter(active=True)
+        self.fields["payment_method"].queryset = PaymentMethod.objects.filter(
+            active=True, kind__in=CRYPTO_DEPOSIT_KINDS,
+        )
         _field_ui(self.fields["payment_method"])
         _field_ui(self.fields["payment_amount"], placeholder="Ej. 100.00", autocomplete="off")
-        _field_ui(self.fields["txid"], placeholder="Pega el hash o referencia de la transacción", autocomplete="off")
-        _field_ui(self.fields["reference"], placeholder="Opcional: nombre del remitente / referencia", autocomplete="off")
-        self.fields["proof"].widget.attrs.update({"accept": "image/png,image/jpeg,image/webp", "class": "hbl-file"})
-
-    def clean_proof(self):
-        proof = self.cleaned_data.get("proof")
-        if proof and getattr(proof, "size", 0) > MAX_PROOF_BYTES:
-            raise forms.ValidationError("El comprobante no puede superar 5 MB.")
-        return proof
 
     def clean(self):
         cleaned = super().clean()
         method = cleaned.get("payment_method")
         amount = cleaned.get("payment_amount")
-        txid = (cleaned.get("txid") or "").strip()
-        cleaned["txid"] = txid
-        if txid:
-            if not re.fullmatch(r"[A-Za-z0-9._:/+\-=]{6,180}", txid):
-                self.add_error("txid", "El TXID contiene caracteres no permitidos o es demasiado corto.")
-            elif Deposit.objects.filter(txid__iexact=txid).exists():
-                self.add_error("txid", "Ese TXID ya fue registrado anteriormente.")
         if not method or not amount:
+            return cleaned
+        if method.kind not in CRYPTO_DEPOSIT_KINDS:
+            self.add_error("payment_method", "Solo se aceptan depósitos USDT por TRC20 o BEP20.")
             return cleaned
         if amount < method.min_amount:
             self.add_error("payment_amount", f"El mínimo del método {method.label} es {method.min_amount} {method.currency}.")
@@ -214,48 +201,53 @@ class DepositForm(forms.Form):
                     "payment_amount",
                     f"La recarga mínima global es US${config.minimum_deposit_usd} (≈ {config.base_currency_symbol}{global_min_base.quantize(Decimal('0.01'))} {base_code}).",
                 )
-        if method.require_txid and not txid:
-            self.add_error("txid", "Este método requiere TXID o referencia de transacción.")
-        if method.require_proof and not cleaned.get("proof"):
-            self.add_error("proof", "Este método requiere comprobante.")
         return cleaned
 
 
 class PayoutAccountForm(forms.ModelForm):
-    withdrawal_method = forms.ModelChoiceField(queryset=WithdrawalMethod.objects.none(), label="Método de retiro")
-
     class Meta:
         model = PayoutAccount
-        fields = ["withdrawal_method", "label", "holder_name", "identifier", "is_default"]
+        fields = ["label", "holder_name", "identifier", "is_default"]
         labels = {
             "label": "Nombre para identificarlo",
             "holder_name": "Titular",
-            "identifier": "Cuenta / dirección / ID",
+            "identifier": "Dirección USDT",
             "is_default": "Usar como predeterminado",
         }
 
     def __init__(self, *args, user=None, **kwargs):
         self.user = user
         super().__init__(*args, **kwargs)
-        qs = WithdrawalMethod.objects.filter(active=True)
-        if user:
-            qs = qs.filter(Q(country="") | Q(country=user.country))
-        self.fields["withdrawal_method"].queryset = qs.order_by("sort_order", "name")
-        _field_ui(self.fields["withdrawal_method"])
-        _field_ui(self.fields["label"], placeholder="Ej. Mi cuenta principal")
-        _field_ui(self.fields["holder_name"], placeholder="Nombre completo del titular", autocomplete="name")
-        _field_ui(self.fields["identifier"], placeholder="Selecciona un método para ver el formato", autocomplete="off")
+        _field_ui(self.fields["label"], placeholder="Ej. Mi wallet principal")
+        _field_ui(self.fields["holder_name"], placeholder="Nombre del titular (opcional)", autocomplete="name")
+        _field_ui(self.fields["identifier"], placeholder="T... para TRC20 o 0x... para BEP20", autocomplete="off")
 
     def clean(self):
         cleaned = super().clean()
-        method = cleaned.get("withdrawal_method")
-        if method and self.user and method.country and method.country != self.user.country:
-            self.add_error("withdrawal_method", "Este método no está disponible para tu país.")
-        if method and method.holder_required and not (cleaned.get("holder_name") or "").strip():
+        identifier = (cleaned.get("identifier") or "").strip()
+        if not identifier:
+            return cleaned
+        method_slug = detect_usdt_withdrawal_network(identifier)
+        if not method_slug:
+            self.add_error(
+                "identifier",
+                "Dirección no reconocida. Usa una dirección TRC20 que comience con T o una BEP20 que comience con 0x.",
+            )
+            return cleaned
+        method = WithdrawalMethod.objects.filter(
+            slug=method_slug, active=True,
+        ).first()
+        if not method:
+            self.add_error("identifier", "La red detectada no está disponible temporalmente.")
+            return cleaned
+        cleaned["withdrawal_method"] = method
+        if method.holder_required and not (cleaned.get("holder_name") or "").strip():
             self.add_error("holder_name", f"{method.name} requiere el nombre del titular.")
-        if method and cleaned.get("identifier"):
+        if identifier:
             try:
-                cleaned["identifier"] = validate_payout_identifier(method, cleaned["identifier"], getattr(self.user, "country", "NI"))
+                cleaned["identifier"] = validate_payout_identifier(
+                    method, identifier, getattr(self.user, "country", "NI"),
+                )
             except forms.ValidationError as exc:
                 self.add_error("identifier", exc)
         return cleaned
@@ -263,7 +255,12 @@ class PayoutAccountForm(forms.ModelForm):
     def save(self, commit=True):
         obj = super().save(commit=False)
         method = self.cleaned_data["withdrawal_method"]
-        obj.kind = PayoutAccount.Kind.CUSTOM
+        obj.withdrawal_method = method
+        obj.kind = (
+            PayoutAccount.Kind.USDT_TRC20
+            if method.slug == "usdt-trc20"
+            else PayoutAccount.Kind.USDT_BEP20
+        )
         obj.network = method.network
         if not obj.label:
             obj.label = method.name
@@ -283,8 +280,11 @@ class WithdrawalForm(forms.Form):
         self.fields["amount"].label = f"Monto a retirar ({currency})"
         self.fields["amount"].help_text = f"Escribe el monto en {currency}. HBL mostrará y guardará la conversión a la moneda del método."
         self.fields["payout_account"].queryset = PayoutAccount.objects.filter(
-            user=user, active=True, withdrawal_method__active=True
-        ).filter(Q(withdrawal_method__country="") | Q(withdrawal_method__country=user.country)).select_related("withdrawal_method")
+            user=user,
+            active=True,
+            withdrawal_method__active=True,
+            withdrawal_method__slug__in=CRYPTO_WITHDRAWAL_SLUGS,
+        ).select_related("withdrawal_method")
         _field_ui(self.fields["payout_account"])
         _field_ui(self.fields["amount"], placeholder="Ej. 750.00", autocomplete="off")
 
@@ -296,6 +296,9 @@ class WithdrawalForm(forms.Form):
             self.add_error("amount", f"La tasa para {currency} aún no está activa. Administración debe configurarla antes de retirar en esa moneda.")
         account = cleaned.get("payout_account")
         if account and account.withdrawal_method:
+            if account.withdrawal_method.slug not in CRYPTO_WITHDRAWAL_SLUGS:
+                self.add_error("payout_account", "Solo se permiten retiros USDT por TRC20 o BEP20.")
+                return cleaned
             payout_currency = account.withdrawal_method.payout_currency_for(self.user)
             if payout_currency != config.base_currency_code.upper() and not CurrencyRate.objects.filter(code=payout_currency, active=True).exists():
                 self.add_error("payout_account", f"El método requiere {payout_currency}, pero esa moneda no tiene una tasa activa.")

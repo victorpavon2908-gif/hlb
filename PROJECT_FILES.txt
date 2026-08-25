@@ -26,7 +26,6 @@ build.sh
 hbl_core/__init__.py
 hbl_core/admin.py
 hbl_core/apps.py
-hbl_core/binance_pay.py
 hbl_core/context_processors.py
 hbl_core/control_forms.py
 hbl_core/control_urls.py
@@ -36,7 +35,8 @@ hbl_core/management/__init__.py
 hbl_core/management/commands/__init__.py
 hbl_core/management/commands/run_referral_payroll.py
 hbl_core/management/commands/seed_hbl.py
-hbl_core/management/commands/sync_binance_pay.py
+hbl_core/management/commands/seed_payment_gateways.py
+hbl_core/management/commands/sync_crypto_deposits.py
 hbl_core/migrations/0001_initial.py
 hbl_core/migrations/0002_memberships_control.py
 hbl_core/migrations/0003_ultra_control_rewards.py
@@ -44,8 +44,14 @@ hbl_core/migrations/0004_ultra_polish_logic.py
 hbl_core/migrations/0005_currency_rates_listen_seconds.py
 hbl_core/migrations/0006_withdrawal_multicurrency_methods.py
 hbl_core/migrations/0007_labels_and_base_help.py
+hbl_core/migrations/0008_rename_hbl_core_de_status_558235_idx_hbl_core_de_status_be9473_idx_and_more.py
+hbl_core/migrations/0009_crypto_only_payment_channels.py
+hbl_core/migrations/0010_nowpayments_deposits.py
 hbl_core/migrations/__init__.py
 hbl_core/models.py
+hbl_core/nowpayments.py
+hbl_core/payment_policies.py
+hbl_core/payment_views.py
 hbl_core/services.py
 hbl_core/static/hbl/css/app.css
 hbl_core/static/hbl/img/icon-192.png

@@ -1,6 +1,4 @@
 import hashlib
-import json
-import secrets
 from decimal import Decimal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import logging
@@ -10,20 +8,19 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.db.models import Q, Sum
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from .binance_pay import BinancePayClient, BinancePayError
-from .forms import DepositForm, GiftRedeemForm, LoginForm, PayoutAccountForm, ProfileForm, RegistrationForm, WithdrawalForm
-from .models import CurrencyRate, DailyAssignment, Deposit, GiftRedemption, ListeningSession, MembershipPlan, PaymentMethod, PlatformConfig, ReferralPayroll, RewardLedger, Track, WheelConfig, WheelPrize, WheelSpin, Withdrawal, WithdrawalMethod
-from .services import HBLError, active_referral_count, approve_deposit, claim_referral_upgrade, complete_listening, current_membership, currency_rate, display_money, eligible_referral_upgrade, ensure_daily_assignments, listening_heartbeat, plan_price_nio, purchase_plan, qualified_referral_count, redeem_gift_code, referral_tier_for_count, request_withdrawal, spin_wheel, start_listening, user_day_bounds, user_localdate
+from .forms import GiftRedeemForm, LoginForm, PayoutAccountForm, ProfileForm, RegistrationForm, WithdrawalForm
+from .models import CurrencyRate, DailyAssignment, GiftRedemption, ListeningSession, MembershipPlan, PlatformConfig, ReferralPayroll, RewardLedger, Track, WheelConfig, WheelPrize, WheelSpin, Withdrawal, WithdrawalMethod
+from .payment_policies import CRYPTO_WITHDRAWAL_SLUGS
+from .services import HBLError, active_referral_count, claim_referral_upgrade, complete_listening, current_membership, currency_rate, display_money, eligible_referral_upgrade, ensure_daily_assignments, listening_heartbeat, plan_price_nio, purchase_plan, qualified_referral_count, redeem_gift_code, referral_tier_for_count, request_withdrawal, spin_wheel, start_listening, user_day_bounds, user_localdate
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -33,11 +30,6 @@ def _client_ip_hash(request):
     raw = request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")[0].strip() or request.META.get("REMOTE_ADDR", "")
     salt = getattr(settings, "SECRET_KEY", "hbl")[:32]
     return hashlib.sha256(f"{salt}:{raw}".encode()).hexdigest() if raw else ""
-
-
-def _merchant_trade_no():
-    # Solo letras/dígitos y <=32, requisito de Binance Pay.
-    return f"HBL{timezone.now():%y%m%d%H%M%S}{secrets.token_hex(6)}"[:32]
 
 
 def login_view(request):
@@ -390,131 +382,6 @@ def listen_complete(request, session_id):
         }, status=500)
 
 @login_required
-def wallet(request):
-    form = DepositForm(request.POST or None, request.FILES or None)
-    if request.method == "POST" and form.is_valid():
-        method = form.cleaned_data["payment_method"]
-        payment_amount = form.cleaned_data["payment_amount"]
-        rate_row = CurrencyRate.objects.filter(code=method.currency.upper(), active=True).first()
-        rate = Decimal("1") if method.currency.upper() == PlatformConfig.get_solo().base_currency_code.upper() else Decimal(rate_row.rate_to_base) if rate_row else Decimal(method.balance_rate or 0)
-
-        if rate <= 0:
-            form.add_error("payment_method", "Este método no tiene una tasa de conversión válida.")
-        else:
-            credit_amount = (Decimal(payment_amount) * rate).quantize(Decimal("0.01"))
-            if credit_amount <= 0:
-                form.add_error("payment_amount", "El monto convertido debe ser mayor que cero.")
-            elif method.kind == PaymentMethod.Kind.BINANCE_PAY:
-                if not getattr(settings, "BINANCE_PAY_ENABLED", False):
-                    form.add_error("payment_method", "Binance Pay automático aún no está habilitado en el servidor.")
-                else:
-                    trade_no = _merchant_trade_no()
-                    deposit = Deposit.objects.create(
-                        user=request.user,
-                        payment_method=method,
-                        amount=credit_amount,
-                        currency=PlatformConfig.get_solo().base_currency_code.upper(),
-                        payment_amount=payment_amount,
-                        payment_currency=method.currency,
-                        balance_rate=rate,
-                        status=Deposit.Status.PROCESSING,
-                        merchant_trade_no=trade_no,
-                    )
-                    try:
-                        base = request.build_absolute_uri("/").rstrip("/")
-                        result = BinancePayClient().create_order(
-                            amount=payment_amount,
-                            merchant_trade_no=trade_no,
-                            return_url=f"{base}{reverse('hbl_binance_return')}?order={trade_no}",
-                            cancel_url=f"{base}{reverse('hbl_wallet')}?payment=cancelled",
-                            webhook_url=f"{base}{reverse('hbl_binance_webhook')}",
-                            currency=method.currency,
-                            support_currency=method.currency,
-                        )
-                        data = result.get("data") or {}
-                        deposit.prepay_id = data.get("prepayId", "")
-                        deposit.checkout_url = data.get("checkoutUrl", "")
-                        deposit.save(update_fields=["prepay_id", "checkout_url"])
-                        if not deposit.checkout_url:
-                            raise BinancePayError("Binance no devolvió checkoutUrl.")
-                        return redirect(deposit.checkout_url)
-                    except BinancePayError as exc:
-                        deposit.status = Deposit.Status.PENDING
-                        deposit.notes = f"Error al crear orden Binance: {exc}"
-                        deposit.save(update_fields=["status", "notes"])
-                        form.add_error(None, "No se pudo crear la orden de Binance Pay. Intenta de nuevo o usa otro método.")
-            else:
-                try:
-                    Deposit.objects.create(
-                        user=request.user,
-                        payment_method=method,
-                        amount=credit_amount,
-                        currency=PlatformConfig.get_solo().base_currency_code.upper(),
-                        payment_amount=payment_amount,
-                        payment_currency=method.currency,
-                        balance_rate=rate,
-                        txid=form.cleaned_data.get("txid", ""),
-                        reference=form.cleaned_data.get("reference", ""),
-                        proof=form.cleaned_data.get("proof"),
-                    )
-                except IntegrityError:
-                    form.add_error("txid", "Ese TXID ya fue registrado anteriormente.")
-                else:
-                    messages.success(request, "Recarga enviada para revisión.")
-                    return redirect("hbl_wallet")
-
-    methods = PaymentMethod.objects.filter(active=True)
-    deposits = Deposit.objects.filter(user=request.user)[:12]
-    ledger = RewardLedger.objects.filter(user=request.user)[:15]
-    config = PlatformConfig.get_solo()
-    usd_rate_row = CurrencyRate.objects.filter(code="USD", active=True).first()
-    usd_rate = Decimal(usd_rate_row.rate_to_base) if usd_rate_row else Decimal(config.exchange_rate_usd_nio or 0)
-    minimum_deposit_nio = (Decimal(config.minimum_deposit_usd) * usd_rate).quantize(Decimal("0.01"))
-    try:
-        minimum_withdraw_preferred = display_money(config.withdrawal_min, getattr(request.user, "preferred_currency", "USD") or "USD")
-    except HBLError:
-        minimum_withdraw_preferred = Decimal("0")
-    return render(request, "hbl/wallet.html", {
-        "form": form, "methods": methods, "deposits": deposits, "ledger": ledger,
-        "config": config, "minimum_deposit_nio": minimum_deposit_nio,
-        "minimum_withdraw_preferred": minimum_withdraw_preferred,
-    })
-
-
-@login_required
-@require_GET
-def binance_return(request):
-    trade_no = request.GET.get("order", "")
-    deposit = get_object_or_404(Deposit, user=request.user, merchant_trade_no=trade_no)
-    try:
-        result = BinancePayClient().query_order(merchant_trade_no=trade_no)
-        data = result.get("data") or {}
-        status = data.get("status")
-        if status == "PAID":
-            BinancePayClient.validate_order_data(
-                data, merchant_trade_no=deposit.merchant_trade_no,
-                expected_amount=deposit.payment_amount, expected_currency=deposit.payment_currency,
-                expected_prepay_id=deposit.prepay_id or None, require_paid=True,
-            )
-            approve_deposit(deposit.id, transaction_id=data.get("transactionId", ""), notes="Confirmado por consulta directa a Binance Pay")
-            messages.success(request, "Pago confirmado por Binance. Tu saldo fue actualizado.")
-        elif status in {"CANCELED", "EXPIRED", "ERROR"}:
-            with transaction.atomic():
-                locked = Deposit.objects.select_for_update().get(pk=deposit.pk)
-                if locked.status != Deposit.Status.APPROVED:
-                    locked.status = Deposit.Status.EXPIRED if status == "EXPIRED" else Deposit.Status.REJECTED
-                    locked.notes = f"Estado Binance: {status}"
-                    locked.processed_at = timezone.now()
-                    locked.save(update_fields=["status", "notes", "processed_at"])
-            messages.warning(request, f"Binance reportó el estado {status}.")
-        else:
-            messages.info(request, "El pago todavía está pendiente de confirmación en Binance.")
-    except BinancePayError:
-        messages.warning(request, "No pudimos confirmar el pago todavía. El sincronizador lo revisará nuevamente.")
-    return redirect("hbl_wallet")
-
-
-@login_required
 def withdrawals(request):
     action = request.POST.get("action") if request.method == "POST" else ""
     form = WithdrawalForm(request.user, request.POST if action == "withdraw" else None)
@@ -537,12 +404,14 @@ def withdrawals(request):
         if account.is_default:
             request.user.hbl_payout_accounts.update(is_default=False)
         account.save()
-        messages.success(request, "Destino de retiro guardado y validado.")
+        messages.success(request, f"Wallet guardada. Red {account.network} detectada automáticamente.")
         return redirect("hbl_withdrawals")
 
     items = Withdrawal.objects.filter(user=request.user)[:12]
     config = PlatformConfig.get_solo()
-    withdrawal_methods = WithdrawalMethod.objects.filter(active=True).filter(Q(country="") | Q(country=request.user.country)).order_by("sort_order", "name")
+    withdrawal_methods = WithdrawalMethod.objects.filter(
+        active=True, slug__in=CRYPTO_WITHDRAWAL_SLUGS,
+    ).order_by("sort_order", "name")
     preferred_currency = (getattr(request.user, "country_currency", "") or config.base_currency_code).upper()
     try:
         preferred_rate = currency_rate(preferred_currency)
@@ -703,55 +572,6 @@ def service_worker(request):
     response["Service-Worker-Allowed"] = "/"
     response["Cache-Control"] = "no-cache"
     return response
-
-
-@csrf_exempt
-@require_POST
-def binance_webhook(request):
-    """Webhook oficial Binance Pay: valida firma RSA y acredita solo PAY_SUCCESS idempotente."""
-    raw = request.body.decode("utf-8")
-    try:
-        client = BinancePayClient()
-        client.verify_webhook(
-            body=raw,
-            timestamp=request.headers.get("BinancePay-Timestamp", ""),
-            nonce=request.headers.get("BinancePay-Nonce", ""),
-            signature=request.headers.get("BinancePay-Signature", ""),
-            certificate_sn=request.headers.get("BinancePay-Certificate-SN", ""),
-        )
-        payload = json.loads(raw)
-        if payload.get("bizType") != "PAY":
-            return JsonResponse({"returnCode": "SUCCESS", "returnMessage": None})
-        data = payload.get("data") or {}
-        if isinstance(data, str):
-            data = json.loads(data)
-        trade_no = data.get("merchantTradeNo", "")
-        if not trade_no:
-            return JsonResponse({"returnCode": "FAIL", "returnMessage": "merchantTradeNo missing"}, status=400)
-        deposit = Deposit.objects.filter(merchant_trade_no=trade_no).first()
-        if not deposit:
-            return JsonResponse({"returnCode": "FAIL", "returnMessage": "order not found"}, status=404)
-        if payload.get("bizStatus") == "PAY_SUCCESS":
-            # Defensa adicional: consulta directa a Binance antes de acreditar.
-            query = client.query_order(merchant_trade_no=trade_no)
-            qdata = query.get("data") or {}
-            BinancePayClient.validate_order_data(
-                qdata, merchant_trade_no=deposit.merchant_trade_no,
-                expected_amount=deposit.payment_amount, expected_currency=deposit.payment_currency,
-                expected_prepay_id=deposit.prepay_id or None, require_paid=True,
-            )
-            approve_deposit(deposit.id, transaction_id=qdata.get("transactionId", ""), notes="Confirmado por webhook firmado + Query Order Binance")
-        elif payload.get("bizStatus") == "PAY_CLOSED":
-            with transaction.atomic():
-                locked = Deposit.objects.select_for_update().get(pk=deposit.pk)
-                if locked.status != Deposit.Status.APPROVED:
-                    locked.status = Deposit.Status.REJECTED
-                    locked.notes = "Orden cerrada por Binance Pay"
-                    locked.processed_at = timezone.now()
-                    locked.save(update_fields=["status", "notes", "processed_at"])
-        return JsonResponse({"returnCode": "SUCCESS", "returnMessage": None})
-    except (BinancePayError, ValueError, json.JSONDecodeError) as exc:
-        return JsonResponse({"returnCode": "FAIL", "returnMessage": str(exc)[:180]}, status=400)
 
 
 @login_required

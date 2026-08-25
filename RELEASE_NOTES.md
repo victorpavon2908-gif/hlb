@@ -10,14 +10,15 @@
 - Galería musical local con lazy-loading.
 - HBL Control responsive con navegación compacta.
 
-## Retiros
+## Depósitos y retiros cripto
 - Solicitud escrita en moneda local asociada al país del usuario.
 - Contabilidad congelada en moneda base.
 - Pago congelado en la moneda real del método.
 - Mínimo global inicial: 500 base, convertido al usuario.
 - Mínimo/máximo/comisión por método.
-- Métodos por país o globales.
-- Validación servidor para banco, Binance ID, TRC20, BEP20/EVM, email y teléfono.
+- Únicamente USDT por TRC20 y BEP20.
+- Depósitos automáticos mediante órdenes e IPN firmado de NOWPayments.
+- Depósitos no concluyentes y todos los retiros conservan revisión manual administrativa.
 - Admin muestra importe solicitado, base, comisión y pago final.
 
 ## Música diaria
@@ -50,5 +51,5 @@
 - throttle básico de intentos de login.
 - producción exige SECRET_KEY fuerte y ALLOWED_HOSTS.
 - saldo/recargas/retiros mediante transacciones atómicas y ledger.
-- Binance Pay valida firma/timestamp del webhook y confirma orden antes de acreditar.
+- Depósitos USDT se acreditan solo con estado `finished` reconfirmado por la API de NOWPayments; pagos parciales o inconsistentes quedan para revisión manual.
 - comprobantes y audios con límites de tamaño/formato.

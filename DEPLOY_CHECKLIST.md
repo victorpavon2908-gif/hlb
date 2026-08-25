@@ -15,9 +15,9 @@
 - [ ] Cargar tasas reales en `/control/monedas/` para todas las monedas que se mostrarán/pagarán.
 - [ ] Confirmar depósito mínimo US$100.
 - [ ] Confirmar retiro mínimo 500 base.
-- [ ] Revisar métodos de recarga: moneda, red, mínimo, máximo, TXID/comprobante.
-- [ ] Revisar métodos de retiro: país, moneda local/fija, mínimo, máximo, comisión y validación.
-- [ ] Probar retiro local → base → moneda método con al menos 2 países y USDT.
+- [ ] Revisar depósitos USDT TRC20/BEP20: monto, orden NOWPayments, IPN y detección automática.
+- [ ] Revisar retiros USDT TRC20/BEP20: dirección, mínimo, máximo, comisión y aprobación manual.
+- [ ] Probar detección de wallet `T...` → TRC20 y `0x...` → BEP20.
 - [ ] Confirmar que solo la primera recarga aprobada paga 10% al referidor.
 - [ ] Probar upgrade 5 → 10 → 15 referidos sin reutilizar bloques.
 - [ ] Revisar ruleta: referidos requeridos, membresía, giros, stock, pesos y términos.
@@ -26,10 +26,8 @@
 - [ ] Cargar suficientes canciones licenciadas para cada plan.
 - [ ] Confirmar 10 segundos globales o el valor operativo deseado.
 - [ ] Probar cambio de día/zona horaria con tareas no completadas y completadas.
-- [ ] Configurar Binance Pay solo mediante variables de entorno.
-- [ ] Configurar webhook HTTPS `/pagos/binance/webhook/`.
-- [ ] Probar Create Order, webhook firmado, Query Order y rechazo de monto/moneda incorrectos.
-- [ ] Programar `sync_binance_pay` si se desea conciliación periódica.
+- [ ] Configurar `NOWPAYMENTS_API_KEY`, `NOWPAYMENTS_IPN_SECRET` y la URL IPN pública.
+- [ ] Probar un pago `finished`, un pago parcial y una firma IPN inválida en cada red.
 - [ ] Programar `run_referral_payroll --pay` solo si usarás sueldo semanal.
 - [ ] Probar registro: email-only, phone-only y ambos en varios países.
 - [ ] Probar responsive en 360, 390, 768, 1024 y desktop.

@@ -517,46 +517,6 @@ LOGIN_URL = "hbl_login"
 
 
 # =========================================================
-# BINANCE PAY
-# =========================================================
-
-BINANCE_PAY_ENABLED = env_bool(
-    "BINANCE_PAY_ENABLED",
-    False,
-)
-
-BINANCE_PAY_API_KEY = os.getenv(
-    "BINANCE_PAY_API_KEY",
-    "",
-).strip()
-
-BINANCE_PAY_SECRET_KEY = os.getenv(
-    "BINANCE_PAY_SECRET_KEY",
-    "",
-).strip()
-
-BINANCE_PAY_CURRENCY = os.getenv(
-    "BINANCE_PAY_CURRENCY",
-    "USDT",
-).strip()
-
-BINANCE_PAY_SUPPORT_CURRENCY = os.getenv(
-    "BINANCE_PAY_SUPPORT_CURRENCY",
-    "USDT",
-).strip()
-
-try:
-    BINANCE_WEBHOOK_MAX_AGE_SECONDS = int(
-        os.getenv(
-            "BINANCE_WEBHOOK_MAX_AGE_SECONDS",
-            "300",
-        )
-    )
-except (TypeError, ValueError):
-    BINANCE_WEBHOOK_MAX_AGE_SECONDS = 300
-
-
-# =========================================================
 # SEGURIDAD PARA RENDER / HTTPS
 # =========================================================
 
@@ -622,6 +582,19 @@ DEFAULT_FROM_EMAIL = os.getenv(
     "DEFAULT_FROM_EMAIL",
     "HBL <no-reply@hbl.local>",
 ).strip()
+
+
+# =========================================================
+# NOWPAYMENTS · DEPÓSITOS USDT
+# =========================================================
+
+NOWPAYMENTS_API_KEY = os.getenv("NOWPAYMENTS_API_KEY", "").strip()
+NOWPAYMENTS_IPN_SECRET = os.getenv("NOWPAYMENTS_IPN_SECRET", "").strip()
+NOWPAYMENTS_API_BASE_URL = os.getenv(
+    "NOWPAYMENTS_API_BASE_URL", "https://api.nowpayments.io/v1"
+).strip().rstrip("/")
+NOWPAYMENTS_IPN_CALLBACK_URL = os.getenv("NOWPAYMENTS_IPN_CALLBACK_URL", "").strip()
+NOWPAYMENTS_TIMEOUT_SECONDS = int(os.getenv("NOWPAYMENTS_TIMEOUT_SECONDS", "15"))
 
 
 # =========================================================
