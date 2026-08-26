@@ -1,8 +1,9 @@
 {% extends 'hbl/base.html' %}
 {% block title %}Referidos · HBL{% endblock %}
 {% block content %}
-<section class="page-title"><span class="eyebrow">COMUNIDAD</span><h1>Referidos y comisiones</h1><p>Gana <b>10%</b> sobre la primera recarga aprobada de cada referido y desbloquea beneficios: con <b>{{ platform_config.free_upgrade_referrals_required|default:5 }}</b> referidos calificados puedes optar a subir de plan sin inversión.</p></section>
-<div class="stats-grid">
+<section class="page-title"><span class="eyebrow">COMUNIDAD</span><h1>Referidos y comisiones</h1><p>Recibe <b>10%</b> sobre la primera recarga aprobada de cada referido siempre que tengas un <b>plan activo</b>. Con <b>{{ platform_config.free_upgrade_referrals_required|default:5 }}</b> referidos calificados puedes optar a subir de plan sin inversión.</p></section>
+<section class="panel space-top control-highlight"><h2>Regla de elegibilidad</h2><p>Para recibir comisiones o recompensas por referidos debes tener una membresía activa en HBL. Para solicitar cualquier retiro también necesitas mantener al menos un plan activo.</p><a class="primary-btn inline" href="{% url 'hbl_plans' %}">Ver planes</a></section>
+<div class="stats-grid space-top">
   <div class="stat-card"><small>Activos escuchando</small><strong>{{ active_referrals }}</strong></div>
   <div class="stat-card"><small>Calificados con recarga</small><strong>{{ qualified_referrals }}</strong></div>
   <div class="stat-card"><small>Nivel actual</small><strong>{% if tier %}{{ tier.name }}{% else %}Sin nivel{% endif %}</strong></div>
