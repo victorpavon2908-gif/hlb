@@ -1,9 +1,67 @@
-{% extends 'hbl/control/base.html' %}{% block title %}Métodos de retiro · HBL Control{% endblock %}{% block heading %}Métodos de retiro{% endblock %}{% block content %}
-<section class="control-hero"><div><span class="eyebrow">CONFIGURACIÓN DE RETIROS USDT</span><h1>Solo TRC20 y BEP20.</h1><p>HBL detecta la red por la dirección de la wallet. Cada solicitud queda pendiente para revisión y pago manual por administración.</p></div><div class="rate-card"><small>Mínimo global</small><strong>{{ config.base_currency_symbol }} {{ config.withdrawal_min }}</strong><span>{{ config.base_currency_code }}</span><a href="{% url 'hbl_control_config' %}">Cambiar global</a></div></section>
+{% extends 'hbl/control/base.html' %}
+{% block title %}Métodos de retiro · HBL Control{% endblock %}
+{% block heading %}Métodos de retiro{% endblock %}
+{% block content %}
+<section class="control-hero">
+  <div>
+    <span class="eyebrow">CONFIGURACIÓN DE RETIROS USDT</span>
+    <h1>Solo TRC20 y BEP20.</h1>
+    <p>HBL detecta la red por la dirección de la wallet. El usuario ve primero cuánto recibirá, el cargo fijo de 1 USDT y el total que se reservará.</p>
+  </div>
+  <div class="rate-card">
+    <small>Mínimo global</small><strong>{{ config.base_currency_symbol }} {{ config.withdrawal_min }}</strong><span>{{ config.base_currency_code }}</span>
+    <a href="{% url 'hbl_control_config' %}">Cambiar global</a>
+  </div>
+</section>
+
 <div class="control-grid-2 space-top">
-<section class="panel"><span class="eyebrow">{% if editing %}EDITAR{% else %}NUEVO{% endif %}</span><h2>{% if editing %}{{ editing.name }}{% else %}Agregar método de retiro{% endif %}</h2>
-<form method="post" class="form-stack" novalidate>{% csrf_token %}{{ form.non_field_errors }}{% for field in form %}<div class="field-row"><label class="field-label" for="{{ field.id_for_label }}"><span>{{ field.label }}</span><span>{% if field.field.required %}Obligatorio{% else %}Opcional{% endif %}</span></label>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}</div>{% endfor %}<div class="form-policy"><b>Política de configuración.</b> Los retiros siempre se pagan en USDT. Nunca guardes claves privadas, frases semilla o secretos API aquí.</div><button class="primary-btn">Guardar red</button>{% if editing %}<a class="secondary-btn inline" href="{% url 'hbl_control_withdrawal_methods' %}">Cancelar edición</a>{% endif %}</form></section>
-<section class="panel"><span class="eyebrow">REGLAS</span><h2>Qué verá el cliente</h2><div class="control-highlight"><b>Mínimo efectivo = mayor entre global y red</b><span>Ejemplo: global {{ config.base_currency_symbol }} {{ config.withdrawal_min }} + red {{ config.base_currency_symbol }} 750 ⇒ mínimo {{ config.base_currency_symbol }} 750.</span></div><div class="detail-list space-top"><div><dt>Dirección T...</dt><dd>Se detecta como USDT TRC20</dd></div><div><dt>Dirección 0x...</dt><dd>Se detecta como USDT BEP20</dd></div><div><dt>Máximo 0</dt><dd>Sin máximo</dd></div><div><dt>Aprobación</dt><dd>Revisión y pago manual por administración</dd></div></div><div class="form-policy space-top"><b>Validación automática.</b> El servidor comprueba que el formato de la wallet corresponda exactamente a la red detectada.</div></section>
+<section class="panel">
+  <span class="eyebrow">{% if editing %}EDITAR{% else %}NUEVO{% endif %}</span>
+  <h2>{% if editing %}{{ editing.name }}{% else %}Agregar método de retiro{% endif %}</h2>
+  <form method="post" class="form-stack" novalidate>
+    {% csrf_token %}{{ form.non_field_errors }}
+    {% for field in form %}
+    <div class="field-row">
+      <label class="field-label" for="{{ field.id_for_label }}"><span>{{ field.label }}</span><span>{% if field.field.required %}Obligatorio{% else %}Opcional{% endif %}</span></label>
+      {{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}
+    </div>
+    {% endfor %}
+    <div class="form-policy"><b>Política HBL.</b> Los retiros se pagan en USDT. En cada despliegue HBL aplica 0% + un cargo fijo equivalente a 1 USDT para TRC20 y BEP20. Nunca guardes claves privadas, frases semilla o secretos API aquí.</div>
+    <button class="primary-btn">Guardar red</button>
+    {% if editing %}<a class="secondary-btn inline" href="{% url 'hbl_control_withdrawal_methods' %}">Cancelar edición</a>{% endif %}
+  </form>
+</section>
+
+<section class="panel">
+  <span class="eyebrow">REGLAS</span><h2>Qué verá el cliente</h2>
+  <div class="control-highlight"><b>Monto neto + cargo fijo de 1 USDT</b><span>Ejemplo en USDT: desea recibir 10 → total reservado 11 → pago neto 10.</span></div>
+  <div class="detail-list space-top">
+    <div><dt>Dirección T...</dt><dd>Se detecta como USDT TRC20</dd></div>
+    <div><dt>Dirección 0x...</dt><dd>Se detecta como USDT BEP20</dd></div>
+    <div><dt>Mínimo</dt><dd>Mayor entre el global y el configurado por red</dd></div>
+    <div><dt>Cargo HBL</dt><dd>1 USDT fijo por retiro</dd></div>
+  </div>
+  <div class="form-policy space-top"><b>Validación automática.</b> El servidor comprueba que el formato de la wallet corresponda exactamente a la red detectada.</div>
+</section>
 </div>
-<section class="panel space-top"><h2>Redes configuradas</h2><div class="table-wrap"><table><thead><tr><th>Red</th><th>Pago</th><th>Validación</th><th>Mínimo</th><th>Comisión</th><th>Estado</th><th></th></tr></thead><tbody>{% for m in items %}<tr><td><b>{{ m.icon }} {{ m.name }}</b><br><small>{{ m.slug }}{% if m.network %} · {{ m.network }}{% endif %}</small></td><td>USDT</td><td>{{ m.get_identifier_type_display }}<br><small>{{ m.account_label }}</small></td><td>{% if m.min_amount_nio %}{{ config.base_currency_symbol }} {{ m.min_amount_nio }}{% else %}Global{% endif %}</td><td>{{ m.fee_percent }}% + {{ config.base_currency_symbol }} {{ m.fee_fixed_nio }}</td><td><span class="status {% if m.active %}paid{% else %}rejected{% endif %}">{% if m.active %}Activo{% else %}Oculto{% endif %}</span></td><td><a class="secondary-btn inline" href="{% url 'hbl_control_withdrawal_method_edit' m.id %}">Editar</a></td></tr>{% empty %}<tr><td colspan="7">Las redes TRC20 y BEP20 aún no están configuradas.</td></tr>{% endfor %}</tbody></table></div></section>
+
+<section class="panel space-top">
+  <h2>Redes configuradas</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Red</th><th>Pago</th><th>Validación</th><th>Mínimo</th><th>Cargo HBL</th><th>Estado</th><th></th></tr></thead>
+    <tbody>
+    {% for m in items %}
+      <tr>
+        <td><b>{{ m.icon }} {{ m.name }}</b><br><small>{{ m.slug }}{% if m.network %} · {{ m.network }}{% endif %}</small></td>
+        <td>USDT</td>
+        <td>{{ m.get_identifier_type_display }}<br><small>{{ m.account_label }}</small></td>
+        <td>{% if m.min_amount_nio %}{{ config.base_currency_symbol }} {{ m.min_amount_nio }}{% else %}Global{% endif %}</td>
+        <td><b>1 USDT</b><br><small>0% porcentual</small></td>
+        <td><span class="status {% if m.active %}paid{% else %}rejected{% endif %}">{% if m.active %}Activo{% else %}Oculto{% endif %}</span></td>
+        <td><a class="secondary-btn inline" href="{% url 'hbl_control_withdrawal_method_edit' m.id %}">Editar</a></td>
+      </tr>
+    {% empty %}<tr><td colspan="7">Las redes TRC20 y BEP20 aún no están configuradas.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</section>
 {% endblock %}
