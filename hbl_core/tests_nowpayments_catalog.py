@@ -7,7 +7,11 @@ from django.urls import reverse
 
 from .models import CurrencyRate, Deposit, PaymentMethod, PlatformConfig
 from .nowpayments import NOWPAYMENTS_PROVIDER, create_payment_for_deposit
-from .nowpayments_catalog import describe_provider_code, sync_nowpayments_methods
+from .nowpayments_catalog import (
+    ALLOWED_PAYMENT_SYMBOLS,
+    describe_provider_code,
+    sync_nowpayments_methods,
+)
 
 User = get_user_model()
 
@@ -43,29 +47,58 @@ class NowPaymentsCatalogTests(TestCase):
         self.assertEqual(arb["symbol"], "ETH")
         self.assertEqual(arb["network"], "Arbitrum")
 
-    def test_sync_creates_every_provider_currency(self):
+    def test_sync_keeps_only_allowed_provider_currencies(self):
         client = MagicMock()
         client.get_merchant_currencies.return_value = {
-            "selectedCurrencies": ["btc", "eth", "usdttrc20", "usdtbsc"]
+            "selectedCurrencies": [
+                "btc", "eth", "usdttrc20", "usdtbsc",
+                "trvl", "chip", "randomtoken",
+            ]
         }
         count = sync_nowpayments_methods(force=True, client=client)
         self.assertEqual(count, 4)
-        self.assertTrue(PaymentMethod.objects.filter(destination="btc", kind=PaymentMethod.Kind.CRYPTO_OTHER, active=True).exists())
-        self.assertTrue(PaymentMethod.objects.filter(destination="eth", kind=PaymentMethod.Kind.CRYPTO_OTHER, active=True).exists())
+        self.assertTrue(PaymentMethod.objects.filter(destination="btc", active=True).exists())
+        self.assertTrue(PaymentMethod.objects.filter(destination="eth", active=True).exists())
         self.assertTrue(PaymentMethod.objects.filter(destination="usdttrc20", active=True).exists())
         self.assertTrue(PaymentMethod.objects.filter(destination="usdtbsc", active=True).exists())
+        self.assertFalse(PaymentMethod.objects.filter(destination="trvl", active=True).exists())
+        self.assertFalse(PaymentMethod.objects.filter(destination="chip", active=True).exists())
 
-    def test_sync_handles_large_catalog_in_bulk(self):
+    def test_sync_filters_large_catalog_to_popular_symbols(self):
         client = MagicMock()
+        allowed_codes = [
+            "btc", "eth", "usdttrc20", "usdtbsc", "usdcerc20", "bnb",
+            "sol", "trx", "doge", "ltc", "ada", "xrp",
+        ]
         client.get_merchant_currencies.return_value = {
-            "selectedCurrencies": [f"coin{i}" for i in range(150)]
+            "selectedCurrencies": [f"coin{i}" for i in range(150)] + allowed_codes
         }
         count = sync_nowpayments_methods(force=True, client=client)
-        self.assertEqual(count, 150)
-        self.assertEqual(
-            PaymentMethod.objects.filter(kind=PaymentMethod.Kind.CRYPTO_OTHER, active=True).count(),
-            150,
+        self.assertEqual(count, len(allowed_codes))
+        active = PaymentMethod.objects.filter(active=True, kind__in=[
+            PaymentMethod.Kind.USDT_TRC20,
+            PaymentMethod.Kind.USDT_BEP20,
+            PaymentMethod.Kind.CRYPTO_OTHER,
+        ])
+        self.assertEqual(active.count(), len(allowed_codes))
+        self.assertTrue(set(active.values_list("currency", flat=True)).issubset(set(ALLOWED_PAYMENT_SYMBOLS)))
+
+    def test_sync_deactivates_old_unsupported_tokens(self):
+        old = PaymentMethod.objects.create(
+            kind=PaymentMethod.Kind.CRYPTO_OTHER,
+            label="TRVL",
+            currency="TRVL",
+            network="Red principal",
+            destination="trvl",
+            min_amount=Decimal("1"),
+            balance_rate=Decimal("36.62"),
+            active=True,
         )
+        client = MagicMock()
+        client.get_merchant_currencies.return_value = {"selectedCurrencies": ["btc"]}
+        sync_nowpayments_methods(force=True, client=client)
+        old.refresh_from_db()
+        self.assertFalse(old.active)
 
     @patch("hbl_core.payment_views.sync_nowpayments_methods")
     def test_wallet_does_not_sync_catalog_when_methods_already_exist(self, sync_mock):
