@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import payment_views, progressive_plans, views
+from . import payment_views, progressive_plans, views, withdrawal_views
 
 urlpatterns = [
     path("", views.home, name="hbl_home"),
@@ -11,7 +11,7 @@ urlpatterns = [
     path("billetera/", payment_views.wallet, name="hbl_wallet"),
     path("api/billetera/revalidar/", payment_views.recheck_crypto_deposits, name="hbl_crypto_recheck"),
     path("api/pagos/nowpayments/ipn/", payment_views.nowpayments_ipn, name="hbl_nowpayments_ipn"),
-    path("retiros/", views.withdrawals, name="hbl_withdrawals"),
+    path("retiros/", withdrawal_views.withdrawals, name="hbl_withdrawals"),
     path("referidos/", views.referrals, name="hbl_referrals"),
     path("ruleta/", views.wheel, name="hbl_wheel"),
     path("api/ruleta/girar/", views.wheel_spin, name="hbl_wheel_spin"),
