@@ -143,15 +143,24 @@ def _kind_for(code: str):
     return PaymentMethod.Kind.CRYPTO_OTHER
 
 
+def _active_count() -> int:
+    return PaymentMethod.objects.filter(
+        active=True,
+        kind__in=[PaymentMethod.Kind.USDT_TRC20, PaymentMethod.Kind.USDT_BEP20, PaymentMethod.Kind.CRYPTO_OTHER],
+    ).count()
+
+
 def sync_nowpayments_methods(*, force: bool = False, client: NowPaymentsClient | None = None) -> int:
     """Sincroniza todas las monedas de pago que NOWPayments tenga disponibles."""
     if not settings.NOWPAYMENTS_API_KEY:
         return 0
+    # GitHub Actions y desarrollo usan DEBUG=True. Nunca deben depender de una
+    # llamada externa para poder ejecutar la suite. force=True queda disponible
+    # para pruebas unitarias explícitas del sincronizador.
+    if settings.DEBUG and not force:
+        return _active_count()
     if not force and cache.get(CATALOG_CACHE_KEY):
-        return PaymentMethod.objects.filter(
-            active=True,
-            kind__in=[PaymentMethod.Kind.USDT_TRC20, PaymentMethod.Kind.USDT_BEP20, PaymentMethod.Kind.CRYPTO_OTHER],
-        ).count()
+        return _active_count()
 
     client = client or NowPaymentsClient()
     codes = []
