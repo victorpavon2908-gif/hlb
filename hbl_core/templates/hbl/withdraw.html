@@ -1,221 +1,337 @@
 {% extends 'hbl/base.html' %}
-{% block title %}Retiros · HBL{% endblock %}
+{% block title %}Retiros USDT · HBL{% endblock %}
+
+{% block head %}
+<style>
+  .withdraw-page{max-width:1180px;margin:0 auto;padding-bottom:28px}
+  .withdraw-hero{position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.08);border-radius:26px;padding:28px;background:linear-gradient(135deg,rgba(31,42,67,.96),rgba(10,15,28,.96));box-shadow:0 20px 60px rgba(0,0,0,.24)}
+  .withdraw-hero:after{content:"";position:absolute;width:240px;height:240px;border-radius:50%;right:-80px;top:-100px;background:radial-gradient(circle,rgba(37,217,166,.25),transparent 68%);pointer-events:none}
+  .withdraw-hero h1{margin:8px 0 8px;font-size:clamp(28px,4vw,46px);line-height:1.04}
+  .withdraw-hero p{max-width:760px;margin:0;color:var(--muted,#9aa6bd);line-height:1.6}
+  .withdraw-badges{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+  .withdraw-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.04);font-weight:700;font-size:13px}
+  .withdraw-badge i{width:9px;height:9px;border-radius:50%;background:#25d9a6;box-shadow:0 0 14px rgba(37,217,166,.85)}
+
+  .withdraw-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:18px 0}
+  .withdraw-stat{padding:17px 18px;border-radius:18px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.075)}
+  .withdraw-stat small{display:block;color:var(--muted,#8f9bb1);margin-bottom:6px}
+  .withdraw-stat strong{display:block;font-size:20px;letter-spacing:-.02em}
+  .withdraw-stat span{display:block;margin-top:5px;color:var(--muted,#8f9bb1);font-size:12px}
+
+  .network-title{display:flex;justify-content:space-between;align-items:end;gap:12px;margin:26px 0 12px}
+  .network-title h2{margin:0;font-size:20px}.network-title p{margin:0;color:var(--muted,#8f9bb1);font-size:13px}
+  .network-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .network-card{display:flex;align-items:center;gap:15px;padding:18px;border-radius:20px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.02))}
+  .network-logo{width:46px;height:46px;display:grid;place-items:center;border-radius:15px;font-weight:900;font-size:15px;background:rgba(255,255,255,.07)}
+  .network-card strong{display:block;font-size:16px}.network-card small{display:block;color:var(--muted,#8f9bb1);margin-top:3px;line-height:1.4}.network-ok{margin-left:auto;font-size:12px;font-weight:800;color:#25d9a6}
+
+  .withdraw-main{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(320px,.65fr);gap:18px;margin-top:18px;align-items:start}
+  .withdraw-card{border:1px solid rgba(255,255,255,.08);border-radius:24px;background:rgba(13,18,31,.84);padding:22px;box-shadow:0 14px 40px rgba(0,0,0,.15)}
+  .withdraw-card-head{display:flex;align-items:center;gap:12px;margin-bottom:20px}.withdraw-card-head .step{width:38px;height:38px;border-radius:13px;display:grid;place-items:center;background:linear-gradient(135deg,#7c5cfc,#25d9a6);font-weight:900}.withdraw-card-head h2{margin:0;font-size:20px}.withdraw-card-head p{margin:3px 0 0;color:var(--muted,#8f9bb1);font-size:13px}
+
+  .withdraw-field{margin-bottom:16px}.withdraw-field label{display:flex;justify-content:space-between;gap:10px;margin-bottom:8px;font-size:13px;font-weight:800}.withdraw-field label span:last-child{font-weight:600;color:var(--muted,#8f9bb1)}
+  .withdraw-field .hbl-input,.withdraw-field select{width:100%;min-height:48px;border-radius:14px}
+  .withdraw-help{display:block;margin-top:7px;font-size:12px;color:var(--muted,#8f9bb1);line-height:1.45}
+  .errorlist{margin:8px 0 0;padding:0;list-style:none;color:#ff7d8d;font-size:12px}
+
+  .amount-shell{position:relative}.amount-shell input{padding-right:72px!important;font-size:18px!important;font-weight:800}.amount-shell span{position:absolute;right:15px;top:50%;transform:translateY(-50%);font-size:13px;font-weight:900;color:#25d9a6}
+  .withdraw-summary{margin-top:18px;padding:16px;border-radius:18px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.075)}
+  .withdraw-summary-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:9px 0;font-size:13px}.withdraw-summary-row span{color:var(--muted,#8f9bb1)}.withdraw-summary-row b{text-align:right}.withdraw-summary-row.total{border-top:1px solid rgba(255,255,255,.08);margin-top:7px;padding-top:14px}.withdraw-summary-row.total b{font-size:18px;color:#25d9a6}.withdraw-summary-note{display:block;margin-top:9px;color:var(--muted,#8f9bb1);font-size:12px;line-height:1.45}
+  .withdraw-action{width:100%;margin-top:16px;min-height:50px;font-weight:900}
+
+  .wallet-network-preview{display:none;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:14px;background:rgba(37,217,166,.08);border:1px solid rgba(37,217,166,.22);margin-top:9px}.wallet-network-preview.show{display:flex}.wallet-network-preview strong{color:#25d9a6}.wallet-network-preview small{color:var(--muted,#8f9bb1)}
+  .withdraw-warning{padding:13px 14px;border-radius:14px;background:rgba(255,182,72,.08);border:1px solid rgba(255,182,72,.2);font-size:12px;line-height:1.5;color:#d9c7a7;margin:14px 0}
+  .withdraw-warning b{color:#ffcc75}
+  .check-line{display:flex;align-items:center;gap:9px;margin:12px 0;font-size:13px}
+
+  .history-card{margin-top:18px}.history-table td,.history-table th{vertical-align:middle}.network-pill{display:inline-flex;padding:5px 8px;border-radius:999px;background:rgba(124,92,252,.12);font-size:11px;font-weight:800}.payout-value{font-weight:900;color:#25d9a6}
+  .empty-wallet{padding:16px;border-radius:15px;border:1px dashed rgba(255,255,255,.14);color:var(--muted,#8f9bb1);font-size:13px;text-align:center;margin-bottom:14px}
+
+  @media(max-width:900px){.withdraw-main{grid-template-columns:1fr}.withdraw-stats{grid-template-columns:1fr 1fr}.withdraw-stat:first-child{grid-column:1/-1}}
+  @media(max-width:620px){.withdraw-page{padding:0 2px 22px}.withdraw-hero{padding:22px 18px;border-radius:20px}.withdraw-stats{grid-template-columns:1fr}.withdraw-stat:first-child{grid-column:auto}.network-grid{grid-template-columns:1fr}.network-title{align-items:start;flex-direction:column}.withdraw-card{padding:18px;border-radius:20px}.history-table th:nth-child(3),.history-table td:nth-child(3),.history-table th:nth-child(4),.history-table td:nth-child(4){display:none}}
+</style>
+{% endblock %}
+
 {% block content %}
-<section class="page-title compact-title">
-  <span class="eyebrow">RETIROS USDT</span>
-  <h1>Retira por TRC20 o BEP20.</h1>
-  <p>
-    Indica cuántos USDT deseas <b>recibir</b>. HBL suma automáticamente <b>1 USDT</b> al total que se reserva de tu saldo.
-    Si deseas recibir <b>10 USDT</b>, el total equivalente a descontar será <b>11 USDT</b>.
-  </p>
-</section>
-
-<section class="money-banner">
-  <div><small>Saldo disponible</small><strong>{% if preferred_balance != None %}{{ preferred_balance }} {{ preferred_currency }}{% else %}— {{ preferred_currency }}{% endif %}</strong><span>Saldo contable: {{ config.base_currency_symbol }} {{ request.user.saldo }} {{ config.base_currency_code }}</span></div>
-  <div><small>Mínimo global</small><strong>{% if withdrawal_min_preferred %}{{ withdrawal_min_preferred }} {{ preferred_currency }}{% else %}{{ config.base_currency_symbol }} {{ config.withdrawal_min }}{% endif %}</strong><span>{{ config.base_currency_symbol }} {{ config.withdrawal_min }} {{ config.base_currency_code }}</span></div>
-  <div><small>Cargo por retiro</small><strong>1 USDT</strong><span>Se suma al monto que deseas recibir</span></div>
-</section>
-
-{% if not withdraw_currency_ready %}
-<div class="currency-alert"><b>Retiros no disponibles por el momento.</b> No pudimos calcular la conversión para {{ preferred_currency }}. Intenta nuevamente más tarde.</div>
-{% endif %}
-
-<div class="method-strip" aria-label="Métodos de retiro disponibles">
-{% for method in withdrawal_methods %}
-  <div class="withdraw-method-chip">
-    <span>{{ method.icon|default:'↗' }}</span>
-    <div>
-      <b>{{ method.name }}</b>
-      <small>Paga en USDT{% if method.network %} · {{ method.network }}{% endif %}</small>
+<div class="withdraw-page">
+  <section class="withdraw-hero">
+    <span class="eyebrow">HBL · RETIROS</span>
+    <h1>Retira USDT de forma simple.</h1>
+    <p>HBL permite retiros únicamente por <b>TRC20</b> y <b>BEP20</b>. Tú escribes cuánto USDT quieres recibir y antes de confirmar verás exactamente cuánto se descontará de tu saldo.</p>
+    <div class="withdraw-badges">
+      <span class="withdraw-badge"><i></i> Solo USDT</span>
+      <span class="withdraw-badge"><i></i> TRC20</span>
+      <span class="withdraw-badge"><i></i> BEP20</span>
+      <span class="withdraw-badge"><i></i> Cargo fijo: 1 USDT</span>
     </div>
+  </section>
+
+  <section class="withdraw-stats">
+    <article class="withdraw-stat">
+      <small>Saldo disponible</small>
+      <strong>{% if preferred_balance != None %}{{ preferred_balance }} {{ preferred_currency }}{% else %}— {{ preferred_currency }}{% endif %}</strong>
+      <span>{{ config.base_currency_symbol }} {{ request.user.saldo }} {{ config.base_currency_code }} en saldo contable</span>
+    </article>
+    <article class="withdraw-stat">
+      <small>Retiro mínimo</small>
+      <strong>{% if withdrawal_min_preferred %}{{ withdrawal_min_preferred }} {{ preferred_currency }}{% else %}{{ config.base_currency_symbol }} {{ config.withdrawal_min }}{% endif %}</strong>
+      <span>Se valida antes de reservar tu saldo</span>
+    </article>
+    <article class="withdraw-stat">
+      <small>Cargo por operación</small>
+      <strong>1 USDT</strong>
+      <span>Se suma al monto que deseas recibir</span>
+    </article>
+  </section>
+
+  {% if not withdraw_currency_ready %}
+    <div class="currency-alert"><b>Retiros temporalmente no disponibles.</b> Falta la tasa necesaria para calcular {{ preferred_currency }}.</div>
+  {% endif %}
+
+  <div class="network-title">
+    <div><span class="eyebrow">REDES DISPONIBLES</span><h2>Elige una wallet compatible</h2></div>
+    <p>No se mostrarán otros métodos de retiro.</p>
   </div>
-{% empty %}<span class="muted">No hay métodos de retiro disponibles en este momento.</span>{% endfor %}
-</div>
-
-<div class="two-col withdrawal-layout">
-  <section class="panel glass-card">
-    <div class="panel-heading"><div class="panel-icon">↗</div><div><span class="eyebrow">NUEVA SOLICITUD</span><h2>Solicitar retiro</h2></div></div>
-    <form method="post" class="form-stack" id="withdraw-form" novalidate>
-      {% csrf_token %}<input type="hidden" name="action" value="withdraw">
-      {{ form.non_field_errors }}
-
-      <div class="field-row">
-        <label for="{{ form.payout_account.id_for_label }}" class="field-label"><span>{{ form.payout_account.label }}</span><span>Obligatorio</span></label>
-        {{ form.payout_account }}
-        {% if form.payout_account.help_text %}<small>{{ form.payout_account.help_text }}</small>{% endif %}
-        {{ form.payout_account.errors }}
-      </div>
-
-      <div hidden aria-hidden="true">{{ form.amount }}</div>
-      <div class="field-row">
-        <label for="desired-withdraw-amount" class="field-label"><span>USDT que deseas recibir</span><span>Obligatorio</span></label>
-        <input id="desired-withdraw-amount" class="hbl-input" type="number" min="0.00000001" step="0.00000001" inputmode="decimal" autocomplete="off" placeholder="Ej. 10.00">
-        <small>Escribe el monto neto. Ejemplo: recibes 10 USDT y HBL calcula un total equivalente a 11 USDT.</small>
-        {{ form.amount.errors }}
-      </div>
-
-      <div class="withdraw-summary" id="withdraw-summary" aria-live="polite">
-        <div class="withdraw-summary-row"><span>Deseas recibir</span><b id="sum-requested">— USDT</b></div>
-        <div class="withdraw-summary-row"><span>Cargo fijo HBL</span><b>1 USDT</b></div>
-        <div class="withdraw-summary-row"><span>Total equivalente</span><b id="sum-usdt-total">— USDT</b></div>
-        <div class="withdraw-summary-row"><span>Total a descontar</span><b id="sum-base">— {{ preferred_currency }}</b></div>
-        <div class="withdraw-summary-row"><span>Mínimo de este método</span><b id="sum-minimum">—</b></div>
-        <div class="withdraw-summary-row net"><span>Pago neto</span><b id="sum-payout">— USDT</b></div>
-        <small id="sum-note">Selecciona un destino y escribe los USDT que deseas recibir para ver el total antes de confirmar.</small>
-      </div>
-
-      <div class="form-policy">
-        <b>Antes de confirmar.</b>
-        El “Total a descontar” ya incluye el cargo fijo de 1 USDT. El saldo queda reservado al enviar la solicitud y la conversión se congela en ese momento.
-      </div>
-      <button class="primary-btn glow-btn" type="submit" {% if not withdraw_currency_ready %}disabled{% endif %}>Confirmar retiro</button>
-      <noscript><div class="currency-alert">Activa JavaScript para calcular de forma segura el total del retiro.</div></noscript>
-    </form>
+  <section class="network-grid">
+    <article class="network-card">
+      <div class="network-logo">TRX</div>
+      <div><strong>USDT · TRC20</strong><small>Red TRON · la dirección normalmente comienza con <b>T</b>.</small></div>
+      <span class="network-ok">ACTIVA</span>
+    </article>
+    <article class="network-card">
+      <div class="network-logo">BNB</div>
+      <div><strong>USDT · BEP20</strong><small>BNB Smart Chain · la dirección comienza con <b>0x</b>.</small></div>
+      <span class="network-ok">ACTIVA</span>
+    </article>
   </section>
 
-  <section class="panel">
-    <div class="panel-heading"><div class="panel-icon">＋</div><div><span class="eyebrow">DESTINOS</span><h2>Agregar wallet USDT</h2></div></div>
-    <p class="muted">Pega una dirección que comience con <b>T</b> para TRC20 o con <b>0x</b> para BEP20. HBL detectará la red automáticamente.</p>
-    <form method="post" class="form-stack" id="account-form" novalidate>
-      {% csrf_token %}<input type="hidden" name="action" value="add_account">
-      {{ account_form.non_field_errors }}
-      <div class="field-row"><label class="field-label" for="{{ account_form.label.id_for_label }}"><span>{{ account_form.label.label }}</span><span>Ej. “Mi wallet”</span></label>{{ account_form.label }}{{ account_form.label.errors }}</div>
-      <div class="field-row"><label class="field-label" for="{{ account_form.holder_name.id_for_label }}"><span>{{ account_form.holder_name.label }}</span><span>Opcional</span></label>{{ account_form.holder_name }}{{ account_form.holder_name.errors }}</div>
-      <div class="field-row"><label class="field-label" for="{{ account_form.identifier.id_for_label }}"><span>{{ account_form.identifier.label }}</span><span>Obligatorio</span></label>{{ account_form.identifier }}<small id="identifier-help-text">Escribe la dirección para detectar la red.</small>{{ account_form.identifier.errors }}</div>
-      <div id="withdrawal-method-hint" class="method-hint" hidden></div>
-      <label class="check-label">{{ account_form.is_default }} <span>{{ account_form.is_default.label }}</span></label>{{ account_form.is_default.errors }}
-      <div class="form-policy"><b>Seguridad.</b> Verifica la dirección antes de guardar. HBL nunca te pedirá frase semilla, clave privada, contraseña ni código 2FA.</div>
-      <button class="secondary-btn" type="submit">Guardar destino</button>
-    </form>
+  <div class="withdraw-main">
+    <section class="withdraw-card">
+      <div class="withdraw-card-head">
+        <div class="step">1</div>
+        <div><h2>Solicitar retiro</h2><p>Selecciona tu wallet y escribe el monto neto a recibir.</p></div>
+      </div>
+
+      <form method="post" id="withdraw-form" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="withdraw">
+        {{ form.non_field_errors }}
+
+        <div class="withdraw-field">
+          <label for="{{ form.payout_account.id_for_label }}"><span>Wallet de destino</span><span>TRC20 o BEP20</span></label>
+          {{ form.payout_account }}
+          {% if not form.payout_account.field.queryset %}<div class="empty-wallet">Primero agrega una wallet USDT en el panel de la derecha.</div>{% endif %}
+          {{ form.payout_account.errors }}
+        </div>
+
+        <div hidden aria-hidden="true">{{ form.amount }}</div>
+        <div class="withdraw-field">
+          <label for="desired-withdraw-amount"><span>USDT que quieres recibir</span><span>Neto</span></label>
+          <div class="amount-shell">
+            <input id="desired-withdraw-amount" class="hbl-input" type="number" min="0.00000001" step="0.00000001" inputmode="decimal" autocomplete="off" placeholder="10.00">
+            <span>USDT</span>
+          </div>
+          <small class="withdraw-help">Ejemplo: si quieres recibir 10 USDT, HBL calculará 11 USDT equivalentes en total: 10 USDT para ti + 1 USDT de cargo.</small>
+          {{ form.amount.errors }}
+        </div>
+
+        <div class="withdraw-summary" aria-live="polite">
+          <div class="withdraw-summary-row"><span>Recibirás</span><b id="sum-requested">— USDT</b></div>
+          <div class="withdraw-summary-row"><span>Cargo HBL</span><b>1 USDT</b></div>
+          <div class="withdraw-summary-row"><span>Red seleccionada</span><b id="sum-network">—</b></div>
+          <div class="withdraw-summary-row total"><span>Total a descontar</span><b id="sum-total">— {{ preferred_currency }}</b></div>
+          <small id="sum-note" class="withdraw-summary-note">Selecciona una wallet y escribe el monto para ver el cálculo.</small>
+        </div>
+
+        <div class="withdraw-warning"><b>Importante:</b> confirma que la red de tu wallet sea exactamente la indicada. Los fondos enviados por una red incorrecta pueden perderse y HBL no puede recuperar una transferencia blockchain confirmada.</div>
+        <button class="primary-btn withdraw-action" type="submit" {% if not withdraw_currency_ready %}disabled{% endif %}>Confirmar retiro USDT</button>
+      </form>
+    </section>
+
+    <aside class="withdraw-card">
+      <div class="withdraw-card-head">
+        <div class="step">2</div>
+        <div><h2>Agregar wallet</h2><p>Guarda un destino USDT para retirar.</p></div>
+      </div>
+
+      <form method="post" id="account-form" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_account">
+        {{ account_form.non_field_errors }}
+
+        <div class="withdraw-field">
+          <label for="{{ account_form.identifier.id_for_label }}"><span>Dirección USDT</span><span>Obligatorio</span></label>
+          {{ account_form.identifier }}
+          {{ account_form.identifier.errors }}
+          <div id="wallet-network-preview" class="wallet-network-preview">
+            <div><strong id="wallet-network-name">—</strong><small id="wallet-network-desc">Red detectada por el formato</small></div>
+            <span>✓</span>
+          </div>
+          <small id="identifier-help-text" class="withdraw-help">TRC20: dirección T... · BEP20: dirección 0x...</small>
+        </div>
+
+        <div class="withdraw-field">
+          <label for="{{ account_form.label.id_for_label }}"><span>Nombre de la wallet</span><span>Opcional</span></label>
+          {{ account_form.label }}
+          {{ account_form.label.errors }}
+        </div>
+
+        <label class="check-line">{{ account_form.is_default }} <span>{{ account_form.is_default.label }}</span></label>
+        {{ account_form.is_default.errors }}
+
+        <div class="withdraw-warning"><b>BEP20:</b> una dirección 0x también puede existir en otras redes EVM. Antes de guardar, verifica en tu wallet que estás usando <b>BNB Smart Chain (BEP20)</b>, no ERC20 ni otra red.</div>
+        <button class="secondary-btn withdraw-action" type="submit">Guardar wallet</button>
+      </form>
+    </aside>
+  </div>
+
+  <section class="withdraw-card history-card">
+    <div class="withdraw-card-head">
+      <div class="step">3</div>
+      <div><h2>Historial de retiros</h2><p>Últimas solicitudes realizadas desde tu cuenta.</p></div>
+    </div>
+    <div class="table-wrap">
+      <table class="history-table">
+        <thead><tr><th>Fecha</th><th>Red</th><th>Total</th><th>Cargo</th><th>Recibes</th><th>Estado</th></tr></thead>
+        <tbody>
+        {% for item in withdrawals %}
+          <tr>
+            <td>{{ item.created_at|date:'d/m/Y H:i' }}</td>
+            <td><span class="network-pill">{{ item.payout_network|default:item.payout_label }}</span></td>
+            <td>{{ item.requested_amount|floatformat:2 }} {{ item.requested_currency }}</td>
+            <td>{{ item.base_currency }} {{ item.fee|floatformat:2 }}</td>
+            <td class="payout-value">{{ item.payout_amount|floatformat:8 }} {{ item.payout_currency }}</td>
+            <td><span class="status {{ item.status }}">{{ item.get_status_display }}</span></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6">Aún no tienes retiros registrados.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </section>
 </div>
-
-<section class="panel space-top">
-  <div class="section-head compact"><div><span class="eyebrow">HISTORIAL</span><h2>Retiros recientes</h2></div></div>
-  <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Red</th><th>Total descontado</th><th>Cargo</th><th>Pago neto</th><th>Estado</th></tr></thead><tbody>
-  {% for item in withdrawals %}
-    <tr>
-      <td>{{ item.created_at|date:'d/m/Y H:i' }}</td>
-      <td><b>{{ item.payout_label }}</b>{% if item.payout_network %}<br><small>{{ item.payout_network }}</small>{% endif %}</td>
-      <td>{{ item.requested_amount|floatformat:2 }} {{ item.requested_currency }}</td>
-      <td>{{ item.base_currency }} {{ item.fee|floatformat:2 }}</td>
-      <td><b>{{ item.payout_amount|floatformat:8 }} {{ item.payout_currency }}</b></td>
-      <td><span class="status {{ item.status }}">{{ item.get_status_display }}</span></td>
-    </tr>
-  {% empty %}<tr><td colspan="6">Todavía no tienes retiros.</td></tr>{% endfor %}
-  </tbody></table></div>
-</section>
 
 {{ withdrawal_accounts_data|json_script:"withdrawal-accounts-json" }}
 {% endblock %}
+
 {% block scripts %}
 <script>
 (() => {
   const identifier = document.getElementById('id_identifier');
+  const previewBox = document.getElementById('wallet-network-preview');
+  const previewName = document.getElementById('wallet-network-name');
+  const previewDesc = document.getElementById('wallet-network-desc');
   const identifierHelp = document.getElementById('identifier-help-text');
-  const hint = document.getElementById('withdrawal-method-hint');
-  const accountsNode = document.getElementById('withdrawal-accounts-json');
-  const accounts = accountsNode ? JSON.parse(accountsNode.textContent || '[]') : [];
 
-  const detectWalletNetwork = () => {
+  const detectNetwork = () => {
     const value = (identifier?.value || '').trim();
     let network = '';
     if (/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(value)) network = 'TRC20';
     else if (/^0x[a-fA-F0-9]{40}$/.test(value)) network = 'BEP20';
-    if (identifierHelp) identifierHelp.textContent = network
-      ? `Red ${network} detectada automáticamente.`
-      : 'Usa una dirección TRC20 (T...) o BEP20 (0x...).';
-    if (hint) {
-      hint.hidden = !network;
-      hint.replaceChildren();
-      if (network) {
-        const strong = document.createElement('b'); strong.textContent = `${network} detectada`; hint.appendChild(strong);
-        const span = document.createElement('span'); span.textContent = 'Revisa la dirección completa antes de guardarla.'; hint.appendChild(span);
-      }
+
+    previewBox?.classList.toggle('show', Boolean(network));
+    if (network && previewName && previewDesc) {
+      previewName.textContent = `USDT · ${network}`;
+      previewDesc.textContent = network === 'TRC20' ? 'TRON (TRC20)' : 'BNB Smart Chain (BEP20)';
+    }
+    if (identifierHelp) {
+      identifierHelp.textContent = network
+        ? `Formato válido para ${network}. Confirma también la red dentro de tu wallet.`
+        : 'TRC20: dirección T... · BEP20: dirección 0x...';
     }
   };
-  identifier?.addEventListener('input', detectWalletNetwork); detectWalletNetwork();
+  identifier?.addEventListener('input', detectNetwork);
+  detectNetwork();
 
   const form = document.getElementById('withdraw-form');
   const accountSelect = document.getElementById('id_payout_account');
-  const serverAmountInput = document.getElementById('id_amount');
-  const desiredAmountInput = document.getElementById('desired-withdraw-amount');
+  const serverAmount = document.getElementById('id_amount');
+  const desiredInput = document.getElementById('desired-withdraw-amount');
+  const accountsNode = document.getElementById('withdrawal-accounts-json');
+  const accounts = accountsNode ? JSON.parse(accountsNode.textContent || '[]') : [];
   const preferredRate = Number('{{ preferred_rate|default:0 }}'.replace(',', '.'));
   const preferredCurrency = '{{ preferred_currency|escapejs }}';
   const baseCurrency = '{{ config.base_currency_code|escapejs }}';
-  const fmt = (n, max=2) => Number.isFinite(n) ? new Intl.NumberFormat(undefined,{minimumFractionDigits:2,maximumFractionDigits:max}).format(n) : '—';
-  const el = id => document.getElementById(id);
+  const fmt = (n, max=8) => Number.isFinite(n) ? new Intl.NumberFormat(undefined,{minimumFractionDigits:2,maximumFractionDigits:max}).format(n) : '—';
 
-  const calculate = (desiredUsdt, account) => {
+  const selectedAccount = () => accounts.find(item => String(item.id) === String(accountSelect?.value || ''));
+
+  const calculate = () => {
+    const account = selectedAccount();
+    const desiredUsdt = Number((desiredInput?.value || '').replace(',', '.'));
     if (!account || !Number.isFinite(desiredUsdt) || desiredUsdt <= 0 || !preferredRate) return null;
+
     const payoutRate = Number(account.payout_rate || 0);
+    const feeFixedBase = Math.max(0, Number(account.fee_fixed_base || 0));
+    const feePct = Math.max(0, Math.min(99.99, Number(account.fee_percent || 0))) / 100;
     if (!payoutRate) return null;
+
     const desiredBase = desiredUsdt * payoutRate;
-    const fixedBase = Math.max(0, Number(account.fee_fixed_base || 0));
-    const pct = Math.max(0, Math.min(99.999999, Number(account.fee_percent || 0))) / 100;
-    const totalBase = (desiredBase + fixedBase) / (1 - pct);
-    const feeBase = Math.max(0, totalBase - desiredBase);
+    const totalBase = (desiredBase + feeFixedBase) / (1 - feePct);
     const totalLocal = totalBase / preferredRate;
     const totalUsdt = totalBase / payoutRate;
-    const payout = desiredBase / payoutRate;
-    return {desiredBase, totalBase, feeBase, totalLocal, totalUsdt, payout, payoutRate};
+    return {account, desiredUsdt, totalBase, totalLocal, totalUsdt, payoutRate};
   };
 
-  const preview = () => {
-    const account = accounts.find(x => String(x.id) === accountSelect?.value);
-    const desiredUsdt = Number((desiredAmountInput?.value || '').replace(',', '.'));
-    const result = calculate(desiredUsdt, account);
+  const renderPreview = () => {
+    const result = calculate();
+    const sumRequested = document.getElementById('sum-requested');
+    const sumNetwork = document.getElementById('sum-network');
+    const sumTotal = document.getElementById('sum-total');
+    const sumNote = document.getElementById('sum-note');
+
     if (!result) {
-      if (serverAmountInput) serverAmountInput.value = '';
-      el('sum-requested').textContent = '— USDT';
-      el('sum-usdt-total').textContent = '— USDT';
-      el('sum-base').textContent = `— ${preferredCurrency}`;
-      el('sum-minimum').textContent = '—';
-      el('sum-payout').textContent = '— USDT';
-      el('sum-note').textContent = 'Selecciona un destino y escribe los USDT que deseas recibir para ver el total antes de confirmar.';
+      if (serverAmount) serverAmount.value = '';
+      if (sumRequested) sumRequested.textContent = '— USDT';
+      if (sumNetwork) sumNetwork.textContent = '—';
+      if (sumTotal) sumTotal.textContent = `— ${preferredCurrency}`;
+      if (sumNote) sumNote.textContent = 'Selecciona una wallet y escribe el monto para ver el cálculo.';
       return;
     }
 
-    if (serverAmountInput) serverAmountInput.value = result.totalLocal.toFixed(2);
-    const minBase = Number(account.effective_min_base || 0);
-    const minLocal = minBase / preferredRate;
-    const minUsdt = minBase / result.payoutRate;
-    const maximum = Number(account.max_base || 0);
-    el('sum-requested').textContent = `${fmt(desiredUsdt,8)} USDT`;
-    el('sum-usdt-total').textContent = `${fmt(result.totalUsdt,8)} USDT`;
-    el('sum-base').textContent = `${fmt(result.totalLocal)} ${preferredCurrency} (${fmt(result.totalBase)} ${baseCurrency})`;
-    el('sum-minimum').textContent = `${fmt(minUsdt,8)} USDT · ${fmt(minLocal)} ${preferredCurrency}`;
-    el('sum-payout').textContent = `${fmt(result.payout,8)} ${account.payout_currency}`;
+    if (serverAmount) serverAmount.value = result.totalLocal.toFixed(2);
+    if (sumRequested) sumRequested.textContent = `${fmt(result.desiredUsdt)} USDT`;
+    if (sumNetwork) sumNetwork.textContent = result.account.method || 'USDT';
+    if (sumTotal) sumTotal.textContent = `${fmt(result.totalLocal,2)} ${preferredCurrency}`;
 
-    let note = `${account.method}: recibirás ${fmt(result.payout,8)} USDT y el total incluye 1 USDT de cargo HBL.`;
-    if (result.totalBase < minBase) note = `El total está por debajo del mínimo permitido de ${fmt(minUsdt,8)} USDT equivalentes.`;
-    else if (maximum > 0 && result.totalBase > maximum) note = 'El total supera el máximo permitido para este método.';
-    el('sum-note').textContent = note;
+    const minBase = Number(result.account.effective_min_base || 0);
+    const maxBase = Number(result.account.max_base || 0);
+    let note = `Equivale a ${fmt(result.totalUsdt)} USDT en total (${fmt(result.totalBase,2)} ${baseCurrency} contables).`;
+    if (result.totalBase < minBase) {
+      const minUsdt = minBase / result.payoutRate;
+      note = `El total está por debajo del mínimo permitido, equivalente a ${fmt(minUsdt)} USDT.`;
+    } else if (maxBase > 0 && result.totalBase > maxBase) {
+      note = 'El total supera el máximo permitido para esta red.';
+    }
+    if (sumNote) sumNote.textContent = note;
   };
 
-  const restoreDesiredFromBoundTotal = () => {
-    const account = accounts.find(x => String(x.id) === accountSelect?.value);
-    const boundTotalLocal = Number((serverAmountInput?.value || '').replace(',', '.'));
-    const payoutRate = Number(account?.payout_rate || 0);
-    if (!account || !Number.isFinite(boundTotalLocal) || boundTotalLocal <= 0 || !preferredRate || !payoutRate || desiredAmountInput?.value) return;
-    const totalBase = boundTotalLocal * preferredRate;
-    const fixedBase = Math.max(0, Number(account.fee_fixed_base || 0));
-    const pct = Math.max(0, Math.min(99.999999, Number(account.fee_percent || 0))) / 100;
-    const desiredBase = Math.max(0, totalBase - (totalBase * pct) - fixedBase);
-    desiredAmountInput.value = (desiredBase / payoutRate).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+  const restoreDesired = () => {
+    const account = selectedAccount();
+    const boundLocal = Number((serverAmount?.value || '').replace(',', '.'));
+    if (!account || !boundLocal || !preferredRate || desiredInput?.value) return;
+    const payoutRate = Number(account.payout_rate || 0);
+    const feeFixedBase = Number(account.fee_fixed_base || 0);
+    const feePct = Math.max(0, Math.min(99.99, Number(account.fee_percent || 0))) / 100;
+    if (!payoutRate) return;
+    const totalBase = boundLocal * preferredRate;
+    const desiredBase = Math.max(0, totalBase * (1 - feePct) - feeFixedBase);
+    desiredInput.value = (desiredBase / payoutRate).toFixed(8).replace(/0+$/,'').replace(/\.$/,'');
   };
 
-  restoreDesiredFromBoundTotal();
-  accountSelect?.addEventListener('change', preview);
-  desiredAmountInput?.addEventListener('input', preview);
+  restoreDesired();
+  accountSelect?.addEventListener('change', renderPreview);
+  desiredInput?.addEventListener('input', renderPreview);
   form?.addEventListener('submit', (event) => {
-    preview();
-    if (!serverAmountInput?.value || !desiredAmountInput?.value) {
+    renderPreview();
+    if (!serverAmount?.value || !accountSelect?.value || !desiredInput?.value) {
       event.preventDefault();
-      el('sum-note').textContent = 'Completa el destino y los USDT que deseas recibir.';
+      const note = document.getElementById('sum-note');
+      if (note) note.textContent = 'Selecciona una wallet válida y escribe los USDT que deseas recibir.';
     }
   });
-  preview();
+  renderPreview();
 })();
 </script>
 {% endblock %}
