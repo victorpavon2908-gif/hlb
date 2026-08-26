@@ -14,7 +14,7 @@ from .nowpayments import NowPaymentsClient, NowPaymentsError
 
 logger = logging.getLogger(__name__)
 
-CATALOG_CACHE_KEY = "hbl:nowpayments:merchant-coins:v4"
+CATALOG_CACHE_KEY = "hbl:nowpayments:merchant-coins:v5"
 CATALOG_CACHE_SECONDS = 3600
 CRYPTO_KINDS = [
     PaymentMethod.Kind.USDT_TRC20,
@@ -22,41 +22,51 @@ CRYPTO_KINDS = [
     PaymentMethod.Kind.CRYPTO_OTHER,
 ]
 
+# HBL solo ofrece estas monedas al usuario. Los métodos antiguos de otros
+# tokens se conservan en la base por historial, pero quedan desactivados.
+ALLOWED_PAYMENT_SYMBOLS = (
+    "BTC",
+    "ETH",
+    "USDT",
+    "USDC",
+    "BNB",
+    "SOL",
+    "TRX",
+    "DOGE",
+    "LTC",
+    "ADA",
+    "XRP",
+)
+ALLOWED_PAYMENT_SYMBOL_SET = frozenset(ALLOWED_PAYMENT_SYMBOLS)
+
 # Se conserva un glifo únicamente como último fallback accesible. La interfaz
 # principal usa logos reales por ticker mediante assets.coincap.io.
 ICON_MAP = {
     "BTC": "₿", "ETH": "Ξ", "USDT": "₮", "USDC": "$", "BNB": "B",
     "SOL": "S", "TRX": "T", "LTC": "Ł", "DOGE": "Ð", "ADA": "A",
-    "XRP": "X", "XMR": "M", "DOT": "D", "BCH": "₿", "TON": "T",
-    "SHIB": "S", "DAI": "D", "MATIC": "M", "POL": "P", "AVAX": "A",
-    "ARB": "A", "OP": "O", "ETC": "Ξ", "XLM": "X", "ATOM": "A",
-    "NEAR": "N", "APT": "A", "SUI": "S", "FIL": "F", "ALGO": "A",
+    "XRP": "X",
 }
 
 NAME_MAP = {
     "BTC": "Bitcoin", "ETH": "Ethereum", "USDT": "Tether", "USDC": "USD Coin",
     "BNB": "BNB", "SOL": "Solana", "TRX": "TRON", "LTC": "Litecoin",
-    "DOGE": "Dogecoin", "ADA": "Cardano", "XRP": "XRP", "XMR": "Monero",
-    "DOT": "Polkadot", "BCH": "Bitcoin Cash", "TON": "Toncoin", "SHIB": "Shiba Inu",
-    "DAI": "DAI", "MATIC": "Polygon", "POL": "Polygon", "AVAX": "Avalanche",
-    "XLM": "Stellar", "ATOM": "Cosmos", "NEAR": "NEAR", "ETC": "Ethereum Classic",
-    "ARB": "Arbitrum", "OP": "Optimism", "APT": "Aptos", "SUI": "Sui",
+    "DOGE": "Dogecoin", "ADA": "Cardano", "XRP": "XRP",
 }
 
-# Códigos que deben aparecer primero. No limita el catálogo: los demás siguen
-# disponibles desde el buscador, pero ya no llenan la pantalla con tokens raros.
 POPULAR_CODE_PRIORITY = {
     "usdttrc20": 0,
     "usdtbsc": 1,
-    "usdtbep20": 1,
+    "usdtbep20": 2,
+    "usdterc20": 3,
     "btc": 10,
     "eth": 20,
-    "bnb": 30,
-    "bnbbsc": 31,
+    "bnbbsc": 30,
+    "bnb": 31,
     "sol": 40,
     "usdcerc20": 50,
     "usdcbsc": 51,
     "usdcsol": 52,
+    "usdc": 53,
     "trx": 60,
     "doge": 70,
     "ltc": 80,
@@ -120,12 +130,6 @@ def _priority_for(code: str, symbol: str) -> int:
 
 
 def _logo_url(symbol: str) -> str:
-    """Logo de criptomoneda por ticker.
-
-    CoinCap publica assets estáticos por símbolo (btc@2x.png, eth@2x.png, etc.).
-    Para tokens no incluidos, el frontend usa un fallback visual limpio sin
-    volver al rombo genérico que tenía la interfaz anterior.
-    """
     safe = re.sub(r"[^a-z0-9]", "", str(symbol or "").lower())[:16]
     return f"https://assets.coincap.io/assets/icons/{safe}@2x.png" if safe else ""
 
@@ -199,6 +203,38 @@ def _extract_codes(payload) -> list[str]:
     return codes
 
 
+def _filter_allowed_codes(codes: list[str]) -> list[str]:
+    """Conserva solo las 11 monedas aprobadas y evita redes duplicadas."""
+    best_by_route: dict[tuple[str, str], tuple[tuple[int, str], str]] = {}
+    for code in codes:
+        meta = describe_provider_code(code)
+        symbol = meta["symbol"]
+        if symbol not in ALLOWED_PAYMENT_SYMBOL_SET:
+            continue
+        route = (symbol, meta["network"])
+        score = (int(meta["priority"]), code)
+        current = best_by_route.get(route)
+        if current is None or score < current[0]:
+            best_by_route[route] = (score, code)
+
+    selected = [entry[1] for entry in best_by_route.values()]
+    selected.sort(
+        key=lambda code: (
+            int(describe_provider_code(code)["priority"]),
+            describe_provider_code(code)["symbol"],
+            describe_provider_code(code)["network"],
+            code,
+        )
+    )
+    return selected
+
+
+def _deactivate_disallowed_existing() -> None:
+    PaymentMethod.objects.filter(kind__in=CRYPTO_KINDS).exclude(
+        currency__in=ALLOWED_PAYMENT_SYMBOLS,
+    ).update(active=False)
+
+
 def _usdt_rate(config: PlatformConfig) -> Decimal:
     rows = {
         row.code: row
@@ -222,7 +258,11 @@ def _kind_for(code: str):
 
 
 def _active_count() -> int:
-    return PaymentMethod.objects.filter(active=True, kind__in=CRYPTO_KINDS).count()
+    return PaymentMethod.objects.filter(
+        active=True,
+        kind__in=CRYPTO_KINDS,
+        currency__in=ALLOWED_PAYMENT_SYMBOLS,
+    ).count()
 
 
 def _apply_method_values(method: PaymentMethod, *, code: str, index: int, min_credit: Decimal, rate: Decimal):
@@ -249,7 +289,9 @@ def _apply_method_values(method: PaymentMethod, *, code: str, index: int, min_cr
 
 
 def sync_nowpayments_methods(*, force: bool = False, client: NowPaymentsClient | None = None) -> int:
-    """Sincroniza el catálogo NOWPayments con pocas consultas a la base de datos."""
+    """Sincroniza únicamente las monedas populares permitidas por HBL."""
+    _deactivate_disallowed_existing()
+
     if not settings.NOWPAYMENTS_API_KEY:
         return 0
     if settings.DEBUG and not force:
@@ -271,7 +313,9 @@ def sync_nowpayments_methods(*, force: bool = False, client: NowPaymentsClient |
             logger.exception("No se pudo sincronizar el catálogo NOWPayments")
             return _active_count()
 
+    codes = _filter_allowed_codes(codes)
     if not codes:
+        logger.warning("NOWPayments no devolvió ninguna de las monedas permitidas por HBL")
         return _active_count()
 
     config = PlatformConfig.get_solo()
