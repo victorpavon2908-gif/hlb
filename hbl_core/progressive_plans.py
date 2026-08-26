@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib import messages
@@ -116,7 +117,7 @@ def purchase_progressive_plan(user_id, plan_id):
         plan=plan,
         status=Membership.Status.ACTIVE,
         starts_at=now,
-        ends_at=now + timezone.timedelta(days=plan.duration_days),
+        ends_at=now + timedelta(days=plan.duration_days),
         price_usd_snapshot=plan.price_usd,
         exchange_rate_snapshot=rate,
         daily_reward_snapshot=plan.daily_reward_nio,
