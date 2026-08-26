@@ -103,6 +103,7 @@ def wallet(request):
                     deposit.provider_status = remote["payment_status"]
                     deposit.pay_address = remote["pay_address"]
                     deposit.payment_amount = remote["pay_amount"].quantize(Decimal("0.00000001"))
+                    deposit.provider_fee_amount = remote["fee_amount"]
                     deposit.notes = "Orden creada. Esperando que NOWPayments confirme el pago como finalizado."
                     deposit.save()
                 except (NowPaymentsError, IntegrityError) as exc:

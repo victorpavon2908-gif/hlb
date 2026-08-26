@@ -26,12 +26,15 @@
   </div>
   <div class="form-policy">
     <b>Envía exactamente {{ active_payment.payment_amount }} USDT por {{ active_payment.payment_method.network }}.</b>
-    No uses otra moneda ni otra red. HBL actualizará el estado automáticamente.
+    Ese total incluye la comisión estimada por NOWPayments. No uses otra moneda ni otra red.
+    La comisión que cobre tu propia billetera por enviar debe pagarse aparte: la dirección debe recibir el total exacto indicado.
   </div>
   <div class="method-card rich-method">
     <div class="method-icon">↓</div>
     <div>
-      <strong>{{ active_payment.payment_amount }} USDT</strong>
+      <strong>Total a enviar: {{ active_payment.payment_amount }} USDT</strong>
+      <span>Monto a acreditar: {{ active_payment.provider_price_amount }} USDT</span>
+      <span>Comisión estimada: {{ active_payment.provider_fee_amount }} USDT</span>
       {% if active_payment.provider_actual_paid %}<span>Recibido por NOWPayments: {{ active_payment.provider_actual_paid }} USDT</span>{% endif %}
       <span>{{ active_payment.payment_method.label }} · NOWPayments #{{ active_payment.provider_payment_id }}</span>
       <code id="active-payment-address">{{ active_payment.pay_address }}</code>
@@ -73,8 +76,8 @@
       {% endfor %}
 
       <div class="form-policy">
-        <b>Validación automática con respaldo manual.</b>
-        Elige TRC20 o BEP20 y el monto. NOWPayments generará la dirección y el importe exacto; no necesitas pegar un TXID ni subir un comprobante. Los pagos parciales o inconsistentes pasan a revisión administrativa sin acreditarse automáticamente.
+        <b>Comisiones calculadas automáticamente.</b>
+        Escribe el monto que deseas acreditar. NOWPayments agregará sus comisiones al total exacto que debes enviar. No necesitas pegar un TXID ni subir un comprobante. Los pagos parciales o inconsistentes pasan a revisión administrativa sin acreditarse automáticamente.
       </div>
 
       <button class="primary-btn glow-btn" type="submit" {% if not nowpayments_ready %}disabled{% endif %}>Generar dirección de depósito</button>
@@ -123,13 +126,15 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Fecha</th><th>Método</th><th>Solicitado</th><th>Recibido</th><th>Saldo HBL</th><th>Estado</th><th>Validación</th></tr>
+        <tr><th>Fecha</th><th>Método</th><th>A acreditar</th><th>Comisión</th><th>Total a enviar</th><th>Recibido</th><th>Saldo HBL</th><th>Estado</th><th>Validación</th></tr>
       </thead>
       <tbody>
         {% for dep in deposits %}
         <tr>
           <td>{{ dep.submitted_at|date:'d/m/Y H:i' }}</td>
           <td>{{ dep.payment_method.label }}</td>
+          <td>{% if dep.provider_payment_id %}{{ dep.provider_price_amount }}{% else %}{{ dep.payment_amount }}{% endif %} {{ dep.payment_currency }}</td>
+          <td>{% if dep.provider_payment_id %}{{ dep.provider_fee_amount }} {{ dep.payment_currency }}{% else %}—{% endif %}</td>
           <td>{{ dep.payment_amount }} {{ dep.payment_currency }}</td>
           <td>{% if dep.provider_actual_paid %}{{ dep.provider_actual_paid }} {{ dep.payment_currency }}{% elif dep.provider_payment_id %}<span class="muted">Sin informar</span>{% else %}—{% endif %}</td>
           <td>{{ config.base_currency_symbol }} {{ dep.amount }} {{ config.base_currency_code }}</td>
@@ -151,7 +156,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="7">Sin recargas.</td></tr>
+        <tr><td colspan="9">Sin recargas.</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -158,7 +158,7 @@ class RegistrationForm(forms.Form):
 
 class DepositForm(forms.Form):
     payment_method = forms.ModelChoiceField(queryset=PaymentMethod.objects.none(), label="Red de depósito")
-    payment_amount = forms.DecimalField(label="Monto a depositar (USDT)", min_value=Decimal("0.00000001"), max_digits=18, decimal_places=8)
+    payment_amount = forms.DecimalField(label="Monto que deseas acreditar (USDT)", min_value=Decimal("0.00000001"), max_digits=18, decimal_places=8)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -16,6 +16,8 @@ services:
         value: .onrender.com
       - key: ENABLE_HSTS
         value: "True"
+      - key: NOWPAYMENTS_FEE_PAID_BY_USER
+        value: "True"
       - key: DATABASE_URL
         fromDatabase:
           name: hbl-db

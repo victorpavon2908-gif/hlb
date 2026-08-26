@@ -100,7 +100,8 @@ class DepositAdmin(admin.ModelAdmin):
         "payment_currency", "balance_rate", "status", "txid", "reference", "proof",
         "submitted_at", "processed_at", "merchant_trade_no", "prepay_id",
         "checkout_url", "transaction_id", "provider", "provider_payment_id",
-        "provider_status", "provider_price_amount", "provider_actual_paid", "pay_address",
+        "provider_status", "provider_price_amount", "provider_fee_amount",
+        "provider_actual_paid", "pay_address",
     )
     actions = ("approve_selected", "reject_selected")
 

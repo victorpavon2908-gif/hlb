@@ -117,7 +117,17 @@ class NowPaymentsClient:
             raise NowPaymentsError("NOWPayments devolvió una respuesta inesperada.")
         return data
 
-    def create_payment(self, *, price_amount: Decimal, pay_currency: str, order_id: str, callback_url: str) -> dict:
+    def create_payment(
+        self,
+        *,
+        price_amount: Decimal,
+        pay_currency: str,
+        order_id: str,
+        callback_url: str,
+        fee_paid_by_user: bool | None = None,
+    ) -> dict:
+        if fee_paid_by_user is None:
+            fee_paid_by_user = settings.NOWPAYMENTS_FEE_PAID_BY_USER
         return self._request("POST", "payment", {
             "price_amount": format(Decimal(price_amount), "f"),
             "price_currency": "usd",
@@ -125,6 +135,7 @@ class NowPaymentsClient:
             "ipn_callback_url": callback_url,
             "order_id": order_id,
             "order_description": "Recarga de saldo HBL",
+            "is_fee_paid_by_user": bool(fee_paid_by_user),
         })
 
     def get_payment(self, payment_id: str) -> dict:
@@ -157,6 +168,7 @@ def create_payment_for_deposit(deposit: Deposit, callback_url: str, client: NowP
         raise NowPaymentsError("NOWPayments no devolvió instrucciones de pago completas.")
     if returned_currency != pay_currency or returned_price != requested_price:
         raise NowPaymentsError("NOWPayments devolvió una moneda o monto distinto al solicitado.")
+    fee_amount = max(pay_amount - returned_price, Decimal("0")).quantize(Decimal("0.00000001"))
 
     return {
         "payment_id": payment_id,
@@ -165,6 +177,7 @@ def create_payment_for_deposit(deposit: Deposit, callback_url: str, client: NowP
         "pay_amount": pay_amount,
         "pay_currency": returned_currency,
         "price_amount": returned_price,
+        "fee_amount": fee_amount,
     }
 
 

@@ -14,6 +14,7 @@ from hbl_core.nowpayments import (
     NOWPAYMENTS_PROVIDER,
     NowPaymentsClient,
     apply_payment_status,
+    create_payment_for_deposit,
     order_id_for,
 )
 
@@ -25,6 +26,7 @@ User = get_user_model()
     NOWPAYMENTS_API_KEY="test-api-key",
     NOWPAYMENTS_IPN_SECRET="test-ipn-secret",
     NOWPAYMENTS_IPN_CALLBACK_URL="https://example.test/api/pagos/nowpayments/ipn/",
+    NOWPAYMENTS_FEE_PAID_BY_USER=True,
     NOWPAYMENTS_TEST_MODE=False,
     STORAGES={
         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
@@ -69,9 +71,10 @@ class NowPaymentsDepositTests(TestCase):
             "payment_id": payment_id,
             "payment_status": "waiting",
             "pay_address": "TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE",
-            "pay_amount": Decimal("100.00000000"),
+            "pay_amount": Decimal("101.00000000"),
             "pay_currency": "usdttrc20",
             "price_amount": Decimal("100.00000000"),
+            "fee_amount": Decimal("1.00000000"),
         }
 
     def _deposit(self, payment_id="700002"):
@@ -103,6 +106,39 @@ class NowPaymentsDepositTests(TestCase):
             "actually_paid": "100.00000000",
         }
 
+    @patch.object(NowPaymentsClient, "_request")
+    def test_create_payment_assigns_provider_fees_to_user(self, request):
+        request.return_value = {}
+        client = NowPaymentsClient(api_key="test-key")
+
+        client.create_payment(
+            price_amount=Decimal("10.00"),
+            pay_currency="usdtbsc",
+            order_id="hbl-deposit:test",
+            callback_url="https://example.test/ipn/",
+        )
+
+        payload = request.call_args.args[2]
+        self.assertTrue(payload["is_fee_paid_by_user"])
+        self.assertEqual(payload["price_amount"], "10.00")
+
+    def test_provider_returns_total_and_estimated_fee(self):
+        deposit = self._deposit()
+        client = MagicMock()
+        client.create_payment.return_value = {
+            "payment_id": "700010",
+            "payment_status": "waiting",
+            "pay_address": "TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE",
+            "pay_amount": "101.25000000",
+            "pay_currency": "usdttrc20",
+            "price_amount": "100.00000000",
+        }
+
+        remote = create_payment_for_deposit(deposit, "https://example.test/ipn/", client=client)
+
+        self.assertEqual(remote["pay_amount"], Decimal("101.25000000"))
+        self.assertEqual(remote["fee_amount"], Decimal("1.25000000"))
+
     @patch("hbl_core.payment_views.create_payment_for_deposit")
     def test_wallet_creates_nowpayments_order_without_txid_or_proof(self, create_payment):
         create_payment.return_value = self._remote_created()
@@ -116,7 +152,9 @@ class NowPaymentsDepositTests(TestCase):
         self.assertEqual(deposit.provider, NOWPAYMENTS_PROVIDER)
         self.assertEqual(deposit.provider_payment_id, "700001")
         self.assertEqual(deposit.txid, "")
-        self.assertEqual(deposit.payment_amount, Decimal("100.00000000"))
+        self.assertEqual(deposit.payment_amount, Decimal("101.00000000"))
+        self.assertEqual(deposit.provider_price_amount, Decimal("100.00000000"))
+        self.assertEqual(deposit.provider_fee_amount, Decimal("1.00000000"))
         self.user.refresh_from_db()
         self.assertEqual(Decimal(self.user.saldo), Decimal("0.00"))
 
@@ -142,6 +180,7 @@ class NowPaymentsDepositTests(TestCase):
         remote = self._remote_created("700099")
         remote["pay_amount"] = Decimal("1.00000000")
         remote["price_amount"] = Decimal("1.00000000")
+        remote["fee_amount"] = Decimal("0.00000000")
         create_payment.return_value = remote
 
         response = self.client.post(reverse("hbl_wallet"), {

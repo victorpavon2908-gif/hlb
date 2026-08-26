@@ -25,6 +25,7 @@ NOWPAYMENTS_IPN_SECRET=tu_secreto_ipn
 NOWPAYMENTS_API_BASE_URL=https://api.nowpayments.io/v1
 NOWPAYMENTS_IPN_CALLBACK_URL=https://hbl-e8cw.onrender.com/api/pagos/nowpayments/ipn/
 NOWPAYMENTS_TIMEOUT_SECONDS=15
+NOWPAYMENTS_FEE_PAID_BY_USER=True
 ```
 
 No guardes estos secretos en Git ni en los campos del panel HBL.
@@ -51,6 +52,8 @@ NOWPayments conserva su propio mínimo dinámico según la red y las comisiones.
 `waiting`, `confirming`, `confirmed` y `sending` permanecen procesando. `partially_paid` o cualquier inconsistencia pasan a revisión manual. `failed`, `refunded` y `expired` no acreditan saldo.
 
 El panel de recargas muestra el campo `actually_paid` como **Recibido** y permite volver a consultarlo con **Actualizar proveedor** antes de aprobar o rechazar manualmente.
+
+Con `NOWPAYMENTS_FEE_PAID_BY_USER=True`, HBL envía `is_fee_paid_by_user: true`. El usuario escribe el saldo que desea acreditar y NOWPayments agrega dinámicamente sus comisiones al total a enviar. La tarifa de la billetera desde la que el usuario transfiere es externa y debe pagarse aparte para que la dirección reciba el monto exacto.
 
 La firma IPN se valida con `x-nowpayments-sig`, HMAC-SHA512 y el secreto IPN. La acreditación es atómica e idempotente para impedir dobles créditos.
 
