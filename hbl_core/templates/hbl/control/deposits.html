@@ -19,12 +19,10 @@
     <thead>
       <tr>
         <th>Usuario</th>
-        <th>Método</th>
+        <th>Red</th>
         <th>A acreditar</th>
-        <th>Comisión</th>
-        <th>Total a enviar</th>
-        <th>Red estimada</th>
-        <th>Saldo recomendado</th>
+        <th>Cargo HBL</th>
+        <th>Total</th>
         <th>Recibido</th>
         <th>Crédito</th>
         <th>Proveedor</th>
@@ -44,20 +42,25 @@
         </td>
         <td>{% if d.provider_payment_id %}{{ d.provider_fee_amount }} {{ d.payment_currency }}{% else %}—{% endif %}</td>
         <td>{{ d.payment_amount }} {{ d.payment_currency }}</td>
-        <td>{% if d.provider_payment_id %}{{ d.sender_network_fee_estimate }} {{ d.payment_currency }}{% else %}—{% endif %}</td>
-        <td>{% if d.provider_payment_id %}{{ d.wallet_balance_required }} {{ d.payment_currency }}{% else %}{{ d.payment_amount }} {{ d.payment_currency }}{% endif %}</td>
         <td>
           {% if d.provider_actual_paid %}
           <strong>{{ d.provider_actual_paid }} {{ d.payment_currency }}</strong>
           {% elif d.provider_payment_id %}
-          <span class="muted">Sin informar</span>
+          <span class="muted">Pendiente</span>
           {% else %}—{% endif %}
         </td>
         <td>{{ platform_config.base_currency_symbol|default:"C$" }} {{ d.amount }}</td>
         <td>
           <small>
             {% if d.provider_payment_id %}
-            NOWPayments #{{ d.provider_payment_id }}<br>{{ d.provider_status|default:'—' }}
+            #{{ d.provider_payment_id }}<br>
+            {% if d.provider_status == 'partially_paid' %}Pago parcial
+            {% elif d.provider_status == 'waiting' %}Esperando pago
+            {% elif d.provider_status == 'confirming' or d.provider_status == 'confirmed' %}Confirmando
+            {% elif d.provider_status == 'sending' %}Finalizando
+            {% elif d.provider_status == 'finished' %}Finalizado
+            {% elif d.provider_status %}{{ d.provider_status }}
+            {% else %}—{% endif %}
             {% else %}
             {{ d.txid|default:d.reference|default:'Manual' }}
             {% endif %}
@@ -71,13 +74,13 @@
             {% if d.provider_payment_id %}
             <form method="post" action="{% url 'hbl_control_deposit_action' d.id 'refresh' %}">
               {% csrf_token %}
-              <button class="secondary-btn">Actualizar proveedor</button>
+              <button class="secondary-btn">Actualizar</button>
             </form>
             {% endif %}
             <form method="post" action="{% url 'hbl_control_deposit_action' d.id 'approve' %}">
               {% csrf_token %}
-              <input class="mini-input" name="note" maxlength="240" placeholder="Nota de aprobación (opcional)">
-              <button class="primary-btn">Aprobar manualmente</button>
+              <input class="mini-input" name="note" maxlength="240" placeholder="Nota opcional">
+              <button class="primary-btn">Aprobar</button>
             </form>
             <form method="post" action="{% url 'hbl_control_deposit_action' d.id 'reject' %}">
               {% csrf_token %}
@@ -89,7 +92,7 @@
         </td>
       </tr>
       {% empty %}
-      <tr><td colspan="13">Sin recargas.</td></tr>
+      <tr><td colspan="11">Sin recargas.</td></tr>
       {% endfor %}
     </tbody>
   </table>
