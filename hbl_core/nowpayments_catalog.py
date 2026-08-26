@@ -14,7 +14,7 @@ from .nowpayments import NowPaymentsClient, NowPaymentsError
 
 logger = logging.getLogger(__name__)
 
-CATALOG_CACHE_KEY = "hbl:nowpayments:merchant-coins:v3"
+CATALOG_CACHE_KEY = "hbl:nowpayments:merchant-coins:v4"
 CATALOG_CACHE_SECONDS = 3600
 CRYPTO_KINDS = [
     PaymentMethod.Kind.USDT_TRC20,
@@ -22,12 +22,14 @@ CRYPTO_KINDS = [
     PaymentMethod.Kind.CRYPTO_OTHER,
 ]
 
+# Se conserva un glifo únicamente como último fallback accesible. La interfaz
+# principal usa logos reales por ticker mediante assets.coincap.io.
 ICON_MAP = {
-    "BTC": "₿", "ETH": "Ξ", "USDT": "₮", "USDC": "◉", "BNB": "◆",
-    "SOL": "◎", "TRX": "♦", "LTC": "Ł", "DOGE": "Ð", "ADA": "₳",
-    "XRP": "✕", "XMR": "ɱ", "DOT": "●", "BCH": "₿", "TON": "◇",
-    "SHIB": "🐕", "DAI": "◈", "MATIC": "⬡", "POL": "⬡", "AVAX": "▲",
-    "ARB": "A", "OP": "O", "ETC": "Ξ", "XLM": "✦", "ATOM": "⚛",
+    "BTC": "₿", "ETH": "Ξ", "USDT": "₮", "USDC": "$", "BNB": "B",
+    "SOL": "S", "TRX": "T", "LTC": "Ł", "DOGE": "Ð", "ADA": "A",
+    "XRP": "X", "XMR": "M", "DOT": "D", "BCH": "₿", "TON": "T",
+    "SHIB": "S", "DAI": "D", "MATIC": "M", "POL": "P", "AVAX": "A",
+    "ARB": "A", "OP": "O", "ETC": "Ξ", "XLM": "X", "ATOM": "A",
     "NEAR": "N", "APT": "A", "SUI": "S", "FIL": "F", "ALGO": "A",
 }
 
@@ -38,12 +40,49 @@ NAME_MAP = {
     "DOT": "Polkadot", "BCH": "Bitcoin Cash", "TON": "Toncoin", "SHIB": "Shiba Inu",
     "DAI": "DAI", "MATIC": "Polygon", "POL": "Polygon", "AVAX": "Avalanche",
     "XLM": "Stellar", "ATOM": "Cosmos", "NEAR": "NEAR", "ETC": "Ethereum Classic",
+    "ARB": "Arbitrum", "OP": "Optimism", "APT": "Aptos", "SUI": "Sui",
+}
+
+# Códigos que deben aparecer primero. No limita el catálogo: los demás siguen
+# disponibles desde el buscador, pero ya no llenan la pantalla con tokens raros.
+POPULAR_CODE_PRIORITY = {
+    "usdttrc20": 0,
+    "usdtbsc": 1,
+    "usdtbep20": 1,
+    "btc": 10,
+    "eth": 20,
+    "bnb": 30,
+    "bnbbsc": 31,
+    "sol": 40,
+    "usdcerc20": 50,
+    "usdcbsc": 51,
+    "usdcsol": 52,
+    "trx": 60,
+    "doge": 70,
+    "ltc": 80,
+    "ada": 90,
+    "xrp": 100,
+}
+POPULAR_SYMBOL_PRIORITY = {
+    "USDT": 0,
+    "BTC": 10,
+    "ETH": 20,
+    "BNB": 30,
+    "SOL": 40,
+    "USDC": 50,
+    "TRX": 60,
+    "DOGE": 70,
+    "LTC": 80,
+    "ADA": 90,
+    "XRP": 100,
 }
 
 NETWORK_SUFFIXES = (
     ("trc20", "TRON (TRC20)"),
     ("erc20", "Ethereum (ERC20)"),
+    ("arc20", "ARC20"),
     ("bep20", "BNB Smart Chain (BEP20)"),
+    ("bep2", "BNB Beacon Chain (BEP2)"),
     ("bsc", "BNB Smart Chain (BEP20)"),
     ("polygon", "Polygon"),
     ("matic", "Polygon"),
@@ -72,11 +111,33 @@ def _clean_code(value) -> str:
     return re.sub(r"[^a-z0-9]", "", str(value or "").strip().lower())[:48]
 
 
+def _priority_for(code: str, symbol: str) -> int:
+    if code in POPULAR_CODE_PRIORITY:
+        return POPULAR_CODE_PRIORITY[code]
+    if symbol in POPULAR_SYMBOL_PRIORITY:
+        return POPULAR_SYMBOL_PRIORITY[symbol] + 5
+    return 1000
+
+
+def _logo_url(symbol: str) -> str:
+    """Logo de criptomoneda por ticker.
+
+    CoinCap publica assets estáticos por símbolo (btc@2x.png, eth@2x.png, etc.).
+    Para tokens no incluidos, el frontend usa un fallback visual limpio sin
+    volver al rombo genérico que tenía la interfaz anterior.
+    """
+    safe = re.sub(r"[^a-z0-9]", "", str(symbol or "").lower())[:16]
+    return f"https://assets.coincap.io/assets/icons/{safe}@2x.png" if safe else ""
+
+
 def describe_provider_code(code: str) -> dict:
-    """Convierte un código NOWPayments en ticker, red, etiqueta e icono."""
+    """Convierte un código NOWPayments en ticker, red, etiqueta y logo."""
     raw = _clean_code(code)
     if not raw:
-        return {"code": "", "symbol": "CRYPTO", "network": "NOWPayments", "label": "Criptomoneda", "icon": "◈"}
+        return {
+            "code": "", "symbol": "CRYPTO", "network": "NOWPayments",
+            "label": "Criptomoneda", "icon": "•", "logo_url": "", "priority": 1000,
+        }
 
     if raw in SPECIAL_CODES:
         symbol, network = SPECIAL_CODES[raw]
@@ -94,8 +155,16 @@ def describe_provider_code(code: str) -> dict:
     symbol = symbol[:12] or raw[:12].upper()
     name = NAME_MAP.get(symbol, symbol)
     label = f"{name} · {network}" if network != "Red principal" else name
-    icon = ICON_MAP.get(symbol, symbol[:1] or "◈")
-    return {"code": raw, "symbol": symbol, "network": network, "label": label, "icon": icon}
+    icon = ICON_MAP.get(symbol, "•")
+    return {
+        "code": raw,
+        "symbol": symbol,
+        "network": network,
+        "label": label,
+        "icon": icon,
+        "logo_url": _logo_url(symbol),
+        "priority": _priority_for(raw, symbol),
+    }
 
 
 def _extract_codes(payload) -> list[str]:
@@ -174,17 +243,13 @@ def _apply_method_values(method: PaymentMethod, *, code: str, index: int, min_cr
     method.balance_rate = rate
     method.sender_network_fee_estimate = Decimal("0")
     method.active = True
-    method.sort_order = 10 + index
+    priority = int(meta["priority"])
+    method.sort_order = priority if priority < 1000 else 1000 + index
     return method
 
 
 def sync_nowpayments_methods(*, force: bool = False, client: NowPaymentsClient | None = None) -> int:
-    """Sincroniza el catálogo NOWPayments con pocas consultas a la base de datos.
-
-    Antes se hacía un ``SELECT`` y un ``SAVE`` por cada criptomoneda. Con cientos
-    de monedas y una base remota eso podía bloquear un worker de Gunicorn hasta
-    superar su timeout. Ahora se precargan los métodos y se persisten por lotes.
-    """
+    """Sincroniza el catálogo NOWPayments con pocas consultas a la base de datos."""
     if not settings.NOWPAYMENTS_API_KEY:
         return 0
     if settings.DEBUG and not force:
@@ -247,8 +312,6 @@ def sync_nowpayments_methods(*, force: bool = False, client: NowPaymentsClient |
             _apply_method_values(method, code=code, index=index, min_credit=min_credit, rate=rate)
             to_update.append(method)
 
-    # Una sola desactivación evita que queden métodos antiguos visibles. Después
-    # bulk_update reactiva únicamente los existentes que siguen en el catálogo.
     PaymentMethod.objects.filter(kind__in=CRYPTO_KINDS).update(active=False)
 
     update_fields = [
@@ -269,7 +332,9 @@ def decorate_method(method: PaymentMethod):
     """Añade atributos efímeros para la UI sin exigir una migración de iconos."""
     meta = describe_provider_code(method.destination or method.currency)
     method.ui_icon = meta["icon"]
+    method.ui_logo_url = meta["logo_url"]
     method.ui_symbol = meta["symbol"]
     method.ui_network = method.network or meta["network"]
     method.ui_provider_code = meta["code"]
+    method.ui_priority = meta["priority"]
     return method
