@@ -9,3 +9,8 @@ class HblCoreConfig(AppConfig):
     def ready(self):
         # Conserva la validación de depósitos antiguos que todavía tengan TXID.
         from . import signals  # noqa: F401
+
+        # Reglas comerciales globales: plan activo para recompensas de referidos
+        # y para solicitar retiros.
+        from .eligibility_policies import install_eligibility_policies
+        install_eligibility_policies()
