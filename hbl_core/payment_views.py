@@ -29,7 +29,6 @@ from .payment_forms import CryptoDepositForm
 from .payment_policies import CRYPTO_DEPOSIT_KINDS, USDT_OPERATION_FEE
 from .services import HBLError, display_money
 
-
 logger = logging.getLogger(__name__)
 CRYPTO_KINDS = list(CRYPTO_DEPOSIT_KINDS)
 ALLOWED_KINDS = CRYPTO_KINDS
@@ -37,15 +36,10 @@ CRYPTO_QUANT = Decimal("0.00000001")
 
 
 def _payment_methods():
-    return (
-        PaymentMethod.objects
-        .filter(active=True, kind__in=ALLOWED_KINDS)
-        .order_by("sort_order", "label")
-    )
+    return PaymentMethod.objects.filter(active=True, kind__in=ALLOWED_KINDS).order_by("sort_order", "label")
 
 
 def _credit_rate_usdt():
-    """Tasa usada para acreditar el monto que el cliente expresa en USDT."""
     config = PlatformConfig.get_solo()
     row = CurrencyRate.objects.filter(code="USDT", active=True).first()
     if row and Decimal(row.rate_to_base or 0) > 0:
@@ -68,10 +62,8 @@ def _integration_ready():
 
 
 def _decorate_deposit_for_ui(deposit, provider_data=None):
-    """Añade datos calculados y metadatos NOWPayments para una interfaz limpia."""
     if not deposit:
         return None
-
     target = Decimal(deposit.payment_amount or 0)
     received = Decimal(deposit.provider_actual_paid or 0)
     deposit.remaining_payment = max(target - received, Decimal("0")).quantize(CRYPTO_QUANT)
@@ -85,19 +77,16 @@ def _decorate_deposit_for_ui(deposit, provider_data=None):
     deposit.ui_network = deposit.payment_method.ui_network
     deposit.ui_extra_id = (deposit.reference or "").strip()
     deposit.ui_expiration_iso = (deposit.prepay_id or "").strip()
-
     if isinstance(provider_data, dict):
         deposit.ui_extra_id = str(provider_data.get("payin_extra_id") or deposit.ui_extra_id or "").strip()
-        deposit.ui_expiration_iso = str(
-            provider_data.get("expiration_estimate_date") or deposit.ui_expiration_iso or ""
-        ).strip()
+        deposit.ui_expiration_iso = str(provider_data.get("expiration_estimate_date") or deposit.ui_expiration_iso or "").strip()
         deposit.ui_network = str(provider_data.get("network") or deposit.ui_network or "").strip()
     return deposit
 
 
 def _refresh_active_metadata(deposit):
-    """Trae la fecha real de expiración/memo sin convertir errores en avisos al usuario."""
-    if not deposit or not deposit.provider_payment_id or not _integration_ready():
+    """Trae fecha real de expiración y memo/tag en producción."""
+    if not deposit or not deposit.provider_payment_id or not _integration_ready() or settings.DEBUG:
         return _decorate_deposit_for_ui(deposit)
     try:
         data = NowPaymentsClient().get_payment(deposit.provider_payment_id)
@@ -135,9 +124,7 @@ def wallet(request):
         decorate_method(method)
 
     form = CryptoDepositForm(request.POST or None)
-    form.fields["payment_method"].queryset = PaymentMethod.objects.filter(
-        pk__in=[m.pk for m in methods]
-    ).order_by("sort_order", "label")
+    form.fields["payment_method"].queryset = PaymentMethod.objects.filter(pk__in=[m.pk for m in methods]).order_by("sort_order", "label")
 
     if request.method == "POST" and form.is_valid():
         method = form.cleaned_data["payment_method"]
@@ -177,30 +164,21 @@ def wallet(request):
                     deposit.pay_address = remote["pay_address"]
                     deposit.payment_amount = remote["pay_amount"].quantize(CRYPTO_QUANT)
                     deposit.provider_fee_amount = USDT_OPERATION_FEE
-                    # Campos históricos reutilizados para conservar metadata sin migración:
-                    # reference = memo/tag; prepay_id = expiration_estimate_date.
                     deposit.reference = str(remote.get("payin_extra_id") or "")[:180]
                     deposit.prepay_id = str(remote.get("expiration_estimate_date") or "")[:64]
                     deposit.notes = "Orden creada. Esperando que NOWPayments confirme el pago."
                     deposit.save()
                 except (NowPaymentsError, IntegrityError) as exc:
                     logger.warning("No se pudo crear la orden NOWPayments para el usuario %s: %s", request.user.pk, exc)
-                    form.add_error(
-                        None,
-                        str(exc) if isinstance(exc, NowPaymentsError)
-                        else "No se pudo guardar la orden de pago. Intenta nuevamente.",
-                    )
+                    form.add_error(None, str(exc) if isinstance(exc, NowPaymentsError) else "No se pudo guardar la orden de pago. Intenta nuevamente.")
                 else:
                     messages.success(
                         request,
-                        f"Orden creada: acreditarás {requested_usdt} USDT + 1 USDT de cargo HBL. "
-                        f"Paga el equivalente exacto mostrado en {deposit.payment_currency}.",
+                        f"Orden creada: acreditarás {requested_usdt} USDT + 1 USDT de cargo HBL. Paga el equivalente exacto mostrado en {deposit.payment_currency}.",
                     )
                     return redirect("hbl_wallet")
 
-    deposits = list(
-        Deposit.objects.filter(user=request.user).select_related("payment_method")[:12]
-    )
+    deposits = list(Deposit.objects.filter(user=request.user).select_related("payment_method")[:12])
     for item in deposits:
         _decorate_deposit_for_ui(item)
 
@@ -220,11 +198,7 @@ def wallet(request):
     config = PlatformConfig.get_solo()
     usd_rate_row = CurrencyRate.objects.filter(code="USD", active=True).first()
     usd_rate = Decimal(usd_rate_row.rate_to_base) if usd_rate_row else Decimal(config.exchange_rate_usd_nio or 0)
-    minimum_deposit_usdt = (
-        Decimal(settings.NOWPAYMENTS_TEST_MIN_USDT)
-        if settings.NOWPAYMENTS_TEST_MODE
-        else Decimal(config.minimum_deposit_usd)
-    )
+    minimum_deposit_usdt = Decimal(settings.NOWPAYMENTS_TEST_MIN_USDT) if settings.NOWPAYMENTS_TEST_MODE else Decimal(config.minimum_deposit_usd)
     minimum_deposit_nio = (minimum_deposit_usdt * usd_rate).quantize(Decimal("0.01"))
     try:
         minimum_withdraw_preferred = display_money(
@@ -255,7 +229,6 @@ def wallet(request):
 @login_required
 @require_POST
 def recheck_crypto_deposits(request):
-    """Consulta a NOWPayments por las órdenes del usuario aún no finalizadas."""
     pending_ids = list(
         Deposit.objects.filter(
             user=request.user,
@@ -287,19 +260,12 @@ def recheck_crypto_deposits(request):
         status__in=[Deposit.Status.PROCESSING, Deposit.Status.PENDING],
         payment_method__kind__in=CRYPTO_KINDS,
     ).count()
-    return JsonResponse({
-        "ok": True,
-        "checked": len(pending_ids),
-        "approved": approved,
-        "expired": expired,
-        "processing": processing,
-    })
+    return JsonResponse({"ok": True, "checked": len(pending_ids), "approved": approved, "expired": expired, "processing": processing})
 
 
 @csrf_exempt
 @require_POST
 def nowpayments_ipn(request):
-    """IPN público: autentica la firma y reconfirma el pago mediante la API."""
     if not settings.NOWPAYMENTS_IPN_SECRET:
         return JsonResponse({"ok": False, "error": "IPN no configurado"}, status=503)
     try:
@@ -315,10 +281,7 @@ def nowpayments_ipn(request):
 
     payment_id = str(payload.get("payment_id") or "").strip()
     try:
-        deposit = Deposit.objects.get(
-            provider=NOWPAYMENTS_PROVIDER,
-            provider_payment_id=payment_id,
-        )
+        deposit = Deposit.objects.get(provider=NOWPAYMENTS_PROVIDER, provider_payment_id=payment_id)
     except Deposit.DoesNotExist:
         return JsonResponse({"ok": False, "error": "Pago desconocido"}, status=404)
     if str(payload.get("order_id") or "").strip() != order_id_for(deposit.id):
