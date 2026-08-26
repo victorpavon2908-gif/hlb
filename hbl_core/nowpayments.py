@@ -1,4 +1,4 @@
-"""Integración mínima y segura con NOWPayments para depósitos USDT."""
+"""Integración segura con NOWPayments para depósitos multimoneda."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from django.conf import settings
 from django.db import transaction
 
 from .models import Deposit, PaymentMethod
-from .payment_policies import USDT_OPERATION_FEE, usdt_fee_from_total, usdt_total_with_fee
+from .payment_policies import USDT_OPERATION_FEE, usdt_total_with_fee
 from .services import approve_deposit
 
 
@@ -23,7 +23,7 @@ PAY_CURRENCY_BY_KIND = {
     PaymentMethod.Kind.USDT_TRC20: "usdttrc20",
     PaymentMethod.Kind.USDT_BEP20: "usdtbsc",
 }
-IN_PROGRESS_STATUSES = {"waiting", "confirming", "confirmed", "sending"}
+IN_PROGRESS_STATUSES = {"waiting", "confirming", "confirmed", "sending", "spending"}
 PARTIAL_STATUS = "partially_paid"
 REJECTED_STATUSES = {"failed", "refunded"}
 FINAL_STATUS = "finished"
@@ -42,6 +42,24 @@ def pay_currency_for_kind(kind: str) -> str:
         return PAY_CURRENCY_BY_KIND[kind]
     except KeyError as exc:
         raise NowPaymentsError("La red seleccionada no está permitida en NOWPayments.") from exc
+
+
+def pay_currency_for_method(method: PaymentMethod) -> str:
+    """Devuelve el código exacto que NOWPayments espera en ``pay_currency``.
+
+    Para el catálogo dinámico se guarda en ``destination`` para conservar
+    compatibilidad con la base actual sin exigir una migración. Los métodos
+    históricos TRC20/BEP20 siguen funcionando aunque todavía no hayan sido
+    sincronizados.
+    """
+    provider_code = str(getattr(method, "destination", "") or "").strip().lower()
+    if provider_code:
+        return provider_code
+    if method.kind in PAY_CURRENCY_BY_KIND:
+        return PAY_CURRENCY_BY_KIND[method.kind]
+    if method.kind == PaymentMethod.Kind.CRYPTO_OTHER and method.currency:
+        return str(method.currency).strip().lower()
+    raise NowPaymentsError("La criptomoneda seleccionada no tiene un código válido en NOWPayments.")
 
 
 def _decimal(value, field_name: str) -> Decimal:
@@ -118,6 +136,14 @@ class NowPaymentsClient:
             raise NowPaymentsError("NOWPayments devolvió una respuesta inesperada.")
         return data
 
+    def get_merchant_currencies(self) -> dict:
+        """Monedas habilitadas específicamente para la cuenta del comercio."""
+        return self._request("GET", "merchant/coins")
+
+    def get_available_currencies(self) -> dict:
+        """Catálogo general disponible en NOWPayments."""
+        return self._request("GET", "currencies")
+
     def create_payment(
         self,
         *,
@@ -144,8 +170,6 @@ class NowPaymentsClient:
             exact_pay_amount = Decimal(pay_amount)
             if exact_pay_amount <= 0:
                 raise NowPaymentsError("El monto exacto a pagar debe ser mayor que cero.")
-            # NOWPayments admite pay_amount como monto cripto explícito. Esto evita
-            # que la cotización USD→USDT cambie 11 USDT a 11.017... USDT.
             payload["pay_amount"] = format(exact_pay_amount, "f")
 
         return self._request("POST", "payment", payload)
@@ -158,17 +182,25 @@ class NowPaymentsClient:
 
 
 def create_payment_for_deposit(deposit: Deposit, callback_url: str, client: NowPaymentsClient | None = None) -> dict:
-    """Crea una orden cuyo total incluye siempre exactamente 1 USDT sobre el saldo a acreditar."""
+    """Crea una orden multimoneda con cargo comercial fijo de 1 USDT.
+
+    El usuario siempre elige cuánto saldo desea acreditar en USDT. El precio
+    comercial enviado a NOWPayments es ``crédito + 1 USDT``. Si paga con USDT,
+    se fuerza también ``pay_amount`` para que 10 + 1 produzca exactamente 11
+    USDT. Si paga con BTC/ETH/u otra moneda, NOWPayments calcula el equivalente
+    cripto del total comercial de 11 USD/USDT.
+    """
     client = client or NowPaymentsClient()
-    pay_currency = pay_currency_for_kind(deposit.payment_method.kind)
+    pay_currency = pay_currency_for_method(deposit.payment_method)
     requested_credit = _decimal(deposit.provider_price_amount, "price_amount")
     if requested_credit <= 0:
         raise NowPaymentsError("El monto del depósito debe ser mayor que cero.")
 
     order_price = usdt_total_with_fee(requested_credit)
+    exact_usdt_payment = pay_currency.startswith("usdt")
     data = client.create_payment(
         price_amount=order_price,
-        pay_amount=order_price,
+        pay_amount=order_price if exact_usdt_payment else None,
         pay_currency=pay_currency,
         order_id=order_id_for(deposit.id),
         callback_url=callback_url,
@@ -183,14 +215,10 @@ def create_payment_for_deposit(deposit: Deposit, callback_url: str, client: NowP
         raise NowPaymentsError("NOWPayments no devolvió instrucciones de pago completas.")
     if returned_currency != pay_currency or returned_price != order_price:
         raise NowPaymentsError("NOWPayments devolvió una moneda o monto distinto al solicitado.")
-    if returned_pay_amount != order_price:
+    if exact_usdt_payment and returned_pay_amount != order_price:
         raise NowPaymentsError(
-            "NOWPayments no respetó el total exacto solicitado. Intenta crear una nueva orden."
+            "NOWPayments no respetó el total exacto en USDT. Intenta crear una nueva orden."
         )
-
-    total_extra = usdt_fee_from_total(returned_pay_amount, requested_credit)
-    if total_extra < USDT_OPERATION_FEE:
-        total_extra = USDT_OPERATION_FEE
 
     return {
         "payment_id": payment_id,
@@ -199,7 +227,13 @@ def create_payment_for_deposit(deposit: Deposit, callback_url: str, client: NowP
         "pay_amount": returned_pay_amount,
         "pay_currency": returned_currency,
         "price_amount": returned_price,
-        "fee_amount": total_extra.quantize(Decimal("0.00000001")),
+        # Este valor siempre está expresado en USDT, no en la moneda de pago.
+        "fee_amount": USDT_OPERATION_FEE,
+        "payin_extra_id": str(data.get("payin_extra_id") or "").strip(),
+        "expiration_estimate_date": str(data.get("expiration_estimate_date") or "").strip(),
+        "time_limit": data.get("time_limit"),
+        "created_at": str(data.get("created_at") or "").strip(),
+        "network": str(data.get("network") or "").strip(),
     }
 
 
@@ -240,7 +274,7 @@ def apply_payment_status(deposit_id, data: dict):
     order_id = str(data.get("order_id") or "").strip()
     pay_currency = str(data.get("pay_currency") or "").strip().lower()
     provider_status = str(data.get("payment_status") or "").strip().lower()
-    expected_currency = pay_currency_for_kind(deposit.payment_method.kind)
+    expected_currency = pay_currency_for_method(deposit.payment_method)
 
     if payment_id != deposit.provider_payment_id:
         return _manual_review(deposit, provider_status, "El ID del proveedor no coincide. Revisión administrativa requerida.")
@@ -255,9 +289,7 @@ def apply_payment_status(deposit_id, data: dict):
 
     credit_amount = Decimal(deposit.provider_price_amount)
     new_price = usdt_total_with_fee(credit_amount)
-    # Compatibilidad con órdenes que ya estaban abiertas antes de activar la
-    # regla fija +1 USDT. Esas órdenes conservan su precio original y pueden
-    # terminar normalmente sin quedar bloqueadas por la actualización.
+    # Compatibilidad con órdenes creadas antes de activar la regla fija +1.
     if price_amount not in {credit_amount, new_price}:
         return _manual_review(deposit, provider_status, "El monto informado por NOWPayments no coincide con la orden HBL. Revisión administrativa requerida.")
 
