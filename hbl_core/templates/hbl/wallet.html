@@ -4,101 +4,83 @@
 {% block head %}<link rel="stylesheet" href="{% static 'hbl/css/wallet_crypto.css' %}">{% endblock %}
 {% block content %}
 <div data-wallet-root data-recheck-url="{% url 'hbl_crypto_recheck' %}">
-<section class="page-title compact-title">
-  <span class="eyebrow">HBL WALLET · NOWPAYMENTS</span>
-  <h1>Paga con la criptomoneda que prefieras.</h1>
-  <p>
-    Elige entre las monedas y redes disponibles en NOWPayments. Tú indicas cuánto deseas acreditar en <b>USDT</b> y HBL suma
-    <b>1 USDT</b> de cargo fijo. Si eliges BTC, ETH u otra moneda, NOWPayments calcula el equivalente exacto que debes enviar.
-  </p>
+<section class="page-title compact-title wallet-hero-title">
+  <span class="eyebrow">HBL WALLET · CRYPTO</span>
+  <h1>Deposita fácil, claro y seguro.</h1>
+  <p>Indica cuánto quieres acreditar en <b>USDT</b>. HBL agrega <b>1 USDT</b> fijo y NOWPayments calcula el equivalente exacto cuando eliges otra criptomoneda.</p>
 </section>
 
 {% if active_payment %}
-<section class="panel glass-card space-bottom">
-  <div class="panel-heading">
-    <div class="panel-icon">{{ active_payment.ui_icon|default:'◈' }}</div>
+<section class="panel glass-card space-bottom active-order-card">
+  <div class="panel-heading active-order-heading">
+    <div class="panel-icon crypto-coin-icon" data-symbol="{{ active_payment.payment_method.currency }}">{{ active_payment.ui_icon|default:'◈' }}</div>
     <div><span class="eyebrow">ORDEN ACTIVA</span><h2>Completa tu depósito</h2></div>
+    <span class="order-live-badge">EN ESPERA</span>
   </div>
 
   {% if active_payment.ui_expiration_iso %}
   <div class="order-timer" data-order-timer data-expires="{{ active_payment.ui_expiration_iso }}" data-start="{{ active_payment.submitted_at|date:'c' }}">
-    <div class="order-timer__top">
-      <span>Tiempo restante de la orden</span>
-      <strong class="order-timer__clock" data-timer-clock>--:--</strong>
-    </div>
+    <div class="order-timer__top"><span>Tiempo restante</span><strong class="order-timer__clock" data-timer-clock>--:--</strong></div>
     <div class="order-timer__bar"><span data-timer-bar></span></div>
-    <small data-timer-note>Al llegar a cero HBL consultará automáticamente el estado real con NOWPayments.</small>
+    <small data-timer-note>La orden se verificará automáticamente al finalizar el tiempo.</small>
   </div>
   {% endif %}
 
   {% if active_payment.is_partial_payment %}
-  <div class="form-policy space-bottom">
-    <b>Pago parcial recibido.</b>
-    Hemos recibido {{ active_payment.provider_actual_paid|default:'0' }} {{ active_payment.payment_currency }} y faltan
-    <strong>{{ active_payment.remaining_payment }} {{ active_payment.payment_currency }}</strong> para completar esta orden.
-    Envía el faltante a la misma dirección.
+  <div class="form-policy space-bottom partial-payment-box">
+    <b>Pago parcial recibido.</b> Llegaron {{ active_payment.provider_actual_paid|default:'0' }} {{ active_payment.payment_currency }} y faltan <strong>{{ active_payment.remaining_payment }} {{ active_payment.payment_currency }}</strong>.
   </div>
   {% endif %}
 
-  <div class="method-card rich-method">
-    <div class="method-icon">{{ active_payment.ui_icon|default:'↓' }}</div>
-    <div>
-      <strong>Total exacto a enviar: {{ active_payment.payment_amount }} {{ active_payment.payment_currency }}</strong>
-      <div class="payment-detail-grid">
-        <div class="payment-detail-pill"><small>Saldo que se acreditará</small><b>{{ active_payment.provider_price_amount }} USDT</b></div>
-        <div class="payment-detail-pill"><small>Cargo fijo HBL</small><b>{{ usdt_operation_fee }} USDT</b></div>
-        <div class="payment-detail-pill"><small>Criptomoneda / red</small><b>{{ active_payment.payment_method.currency }} · {{ active_payment.ui_network }}</b></div>
-        <div class="payment-detail-pill"><small>Orden NOWPayments</small><b>#{{ active_payment.provider_payment_id }}</b></div>
-      </div>
-
-      {% if active_payment.provider_actual_paid %}<span>Recibido hasta ahora: {{ active_payment.provider_actual_paid }} {{ active_payment.payment_currency }}</span>{% endif %}
-
-      <div class="payment-address-block">
-        <small>Dirección de pago</small>
-        <code id="active-payment-address">{{ active_payment.pay_address }}</code>
-        <button class="secondary-btn" type="button" data-copy="#active-payment-address" style="width:max-content;min-height:32px;padding:6px 10px">Copiar dirección</button>
-
-        {% if active_payment.ui_extra_id %}
-        <div class="payment-extra-id">
-          <small>MEMO / TAG / EXTRA ID — obligatorio para esta moneda</small>
-          <b id="active-payment-extra">{{ active_payment.ui_extra_id }}</b>
-          <button class="secondary-btn" type="button" data-copy="#active-payment-extra" style="width:max-content;min-height:30px;padding:5px 9px;margin-top:5px">Copiar memo/tag</button>
-        </div>
-        {% endif %}
-      </div>
-
-      <small>
-        {% if active_payment.provider_status == 'partially_paid' %}
-          Pago parcial detectado · completa el faltante.
-        {% elif active_payment.provider_status == 'waiting' %}
-          Esperando que llegue el pago.
-        {% elif active_payment.provider_status == 'confirming' or active_payment.provider_status == 'confirmed' %}
-          Pago detectado · esperando confirmaciones de la red.
-        {% elif active_payment.provider_status == 'sending' or active_payment.provider_status == 'spending' %}
-          Confirmación final en proceso.
-        {% else %}
-          Verificación automática en curso.
-        {% endif %}
-      </small>
-    </div>
+  <div class="payment-total-card">
+    <small>TOTAL EXACTO A ENVIAR</small>
+    <strong>{{ active_payment.payment_amount }} <span>{{ active_payment.payment_currency }}</span></strong>
+    <p>No reduzcas este monto por la comisión que cobre tu billetera o exchange.</p>
   </div>
 
-  <div class="form-policy space-top">
-    <b>Importante.</b> Envía exactamente la moneda, red, dirección y memo/tag mostrados. La comisión que cobre tu billetera o exchange es externa a HBL y no debe reducir el monto que llega a la dirección.
+  <div class="payment-detail-grid">
+    <div class="payment-detail-pill"><small>Se acreditará</small><b>{{ active_payment.provider_price_amount }} USDT</b></div>
+    <div class="payment-detail-pill"><small>Cargo HBL</small><b>{{ usdt_operation_fee }} USDT</b></div>
+    <div class="payment-detail-pill"><small>Moneda / red</small><b>{{ active_payment.payment_method.currency }} · {{ active_payment.ui_network }}</b></div>
+    <div class="payment-detail-pill"><small>Orden</small><b>#{{ active_payment.provider_payment_id }}</b></div>
+  </div>
+
+  <div class="payment-address-block">
+    <div class="address-label-row"><small>DIRECCIÓN DE PAGO</small><span>{{ active_payment.payment_method.currency }} · {{ active_payment.ui_network }}</span></div>
+    <div class="copy-address-row">
+      <code id="active-payment-address">{{ active_payment.pay_address }}</code>
+      <button class="copy-icon-btn" type="button" data-copy="#active-payment-address" aria-label="Copiar dirección" title="Copiar dirección">
+        <svg viewBox="0 0 24 24"><rect x="9" y="9" width="10" height="10" rx="2"/><path d="M15 9V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/></svg>
+      </button>
+    </div>
+
+    {% if active_payment.ui_extra_id %}
+    <div class="payment-extra-id">
+      <small>MEMO / TAG / EXTRA ID — obligatorio</small>
+      <div class="copy-address-row"><b id="active-payment-extra">{{ active_payment.ui_extra_id }}</b><button class="copy-icon-btn" type="button" data-copy="#active-payment-extra" aria-label="Copiar memo/tag"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="10" height="10" rx="2"/><path d="M15 9V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/></svg></button></div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="order-status-line">
+    <span class="status-dot"></span>
+    {% if active_payment.provider_status == 'partially_paid' %}Pago parcial detectado · completa el faltante.
+    {% elif active_payment.provider_status == 'waiting' %}Esperando que llegue el pago.
+    {% elif active_payment.provider_status == 'confirming' or active_payment.provider_status == 'confirmed' %}Pago detectado · esperando confirmaciones.
+    {% elif active_payment.provider_status == 'sending' or active_payment.provider_status == 'spending' %}Confirmación final en proceso.
+    {% else %}Verificación automática en curso.{% endif %}
   </div>
 </section>
 {% endif %}
 
 <div class="two-col wallet-grid">
-  <section class="panel glass-card">
+  <section class="panel glass-card deposit-card">
     <div class="panel-heading">
-      <div class="panel-icon">↓</div>
-      <div><span class="eyebrow">NUEVA RECARGA</span><h2>Genera una orden de pago</h2></div>
+      <div class="panel-icon"><svg class="line-icon" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg></div>
+      <div><span class="eyebrow">NUEVA RECARGA</span><h2>Genera tu dirección</h2></div>
     </div>
 
-    {% if not nowpayments_ready %}
-    <div class="form-policy"><b>Depósitos no disponibles por el momento.</b> Intenta nuevamente más tarde.</div>
-    {% endif %}
+    {% if not nowpayments_ready %}<div class="form-policy"><b>Depósitos temporalmente no disponibles.</b> Intenta nuevamente más tarde.</div>{% endif %}
 
     <form method="post" class="form-stack" novalidate>
       {% csrf_token %}
@@ -109,23 +91,24 @@
         <div class="crypto-picker" data-crypto-picker>
           {{ form.payment_method }}
           <button class="crypto-picker-trigger" type="button" data-crypto-trigger aria-haspopup="listbox" aria-expanded="false">
-            <span class="crypto-coin-icon" data-selected-icon>◈</span>
-            <span class="crypto-picker-trigger__meta">
-              <b data-selected-title>Selecciona una criptomoneda</b>
-              <small data-selected-subtitle>{{ methods_count }} opciones sincronizadas con NOWPayments</small>
-            </span>
+            <span class="crypto-coin-icon" data-selected-icon data-symbol="">◈</span>
+            <span class="crypto-picker-trigger__meta"><b data-selected-title>Selecciona una criptomoneda</b><small data-selected-subtitle>Mostramos pocas opciones primero; puedes buscar cualquier moneda.</small></span>
             <span class="crypto-picker-chevron">⌄</span>
           </button>
           <div class="crypto-picker-menu">
-            <input class="crypto-picker-search" type="search" placeholder="Buscar BTC, ETH, USDT, red..." autocomplete="off" data-crypto-search>
+            <div class="crypto-picker-toolbar">
+              <input class="crypto-picker-search" type="search" placeholder="Buscar BTC, ETH, USDT, red..." autocomplete="off" data-crypto-search>
+              <button class="crypto-show-all" type="button" data-crypto-show-all>Ver todas</button>
+            </div>
             <div class="crypto-picker-list" role="listbox">
               {% for method in methods %}
               <button type="button" class="crypto-picker-option" role="option"
-                data-crypto-option data-value="{{ method.id }}" data-icon="{{ method.ui_icon }}"
+                data-crypto-option data-value="{{ method.id }}" data-icon="{{ method.ui_icon }}" data-symbol="{{ method.currency }}" data-rank="{{ forloop.counter }}"
                 data-title="{{ method.label }}" data-subtitle="{{ method.currency }} · {{ method.ui_network }}"
                 data-search="{{ method.label|lower }} {{ method.currency|lower }} {{ method.ui_network|lower }} {{ method.ui_provider_code|lower }}">
-                <span class="crypto-coin-icon">{{ method.ui_icon }}</span>
-                <span class="crypto-picker-option__meta"><b>{{ method.currency }} · {{ method.label }}</b><small>{{ method.ui_network }} · {{ method.ui_provider_code }}</small></span>
+                <span class="crypto-coin-icon" data-symbol="{{ method.currency }}">{{ method.ui_icon }}</span>
+                <span class="crypto-picker-option__meta"><b>{{ method.currency }}</b><small>{{ method.label }} · {{ method.ui_network }}</small></span>
+                {% if forloop.counter <= 6 %}<span class="quick-choice-badge">Rápida</span>{% endif %}
               </button>
               {% endfor %}
             </div>
@@ -136,38 +119,31 @@
       </div>
 
       <div class="field-row">
-        <label class="field-label" for="{{ form.payment_amount.id_for_label }}"><span>{{ form.payment_amount.label }}</span><span>Obligatorio</span></label>
+        <label class="field-label" for="{{ form.payment_amount.id_for_label }}"><span>{{ form.payment_amount.label }}</span><span>USDT</span></label>
         {{ form.payment_amount }}
-        <small>Ejemplo: escribes 10 USDT → HBL procesa un total comercial de 11 USDT y NOWPayments te dice cuánto enviar en la criptomoneda elegida.</small>
+        <small class="input-help">Ejemplo: quieres acreditar 10 USDT → el cargo HBL es 1 USDT → total comercial 11 USDT.</small>
         {{ form.payment_amount.errors }}
       </div>
 
-      <div class="form-policy">
-        <b>Cargo fijo: 1 USDT.</b> El monto que escribas es exactamente lo que HBL acreditará a tu cuenta. No necesitas pegar TXID ni subir comprobantes: la confirmación se realiza por API/IPN.
-      </div>
-
-      <button class="primary-btn glow-btn" type="submit" {% if not nowpayments_ready %}disabled{% endif %}>Generar dirección de depósito</button>
+      <div class="fee-summary-card"><span><small>TÚ INDICAS</small><b>Monto a acreditar</b></span><span class="fee-plus">+</span><span><small>HBL</small><b>1 USDT fijo</b></span></div>
+      <button class="primary-btn glow-btn deposit-submit" type="submit" {% if not nowpayments_ready %}disabled{% endif %}><span>Generar dirección de depósito</span><svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M14 7l5 5-5 5"/></svg></button>
     </form>
   </section>
 
-  <section class="panel">
-    <div class="section-head compact"><div><span class="eyebrow">CATÁLOGO NOWPAYMENTS</span><h2>Criptomonedas disponibles</h2></div></div>
-    <div class="crypto-catalog-summary"><div><strong>{{ methods_count }} métodos activos</strong><br><span>La lista se actualiza automáticamente desde NOWPayments.</span></div><span>API LIVE</span></div>
-
+  <section class="panel glass-card quick-crypto-panel">
+    <div class="section-head compact"><div><span class="eyebrow">SELECCIÓN RÁPIDA</span><h2>Pocas opciones, mejor ordenadas</h2></div></div>
+    <p class="catalog-intro">Estas son las primeras opciones disponibles. Para cualquier otra criptomoneda, usa el buscador del selector.</p>
     <div class="crypto-mini-grid">
-      {% for method in featured_methods %}
-      <div class="crypto-mini-card"><span class="crypto-coin-icon">{{ method.ui_icon }}</span><div><b>{{ method.currency }} · {{ method.label }}</b><small>{{ method.ui_network }}</small></div></div>
-      {% empty %}
-      <div class="form-policy"><b>No hay monedas disponibles.</b> Intenta nuevamente más tarde.</div>
-      {% endfor %}
+      {% for method in methods|slice:":6" %}
+      <div class="crypto-mini-card"><span class="crypto-coin-icon" data-symbol="{{ method.currency }}">{{ method.ui_icon }}</span><div><b>{{ method.currency }}</b><small>{{ method.label }} · {{ method.ui_network }}</small></div></div>
+      {% empty %}<div class="form-policy"><b>No hay monedas disponibles.</b> Intenta nuevamente más tarde.</div>{% endfor %}
     </div>
-
-    {% if methods_count > 12 %}<div class="form-policy space-top"><b>Hay más opciones.</b> Abre el selector de la izquierda y usa el buscador para ver todas las criptomonedas y redes disponibles.</div>{% endif %}
-    <div class="form-policy space-top"><b>Seguridad.</b> HBL nunca te pedirá frase semilla, clave privada, contraseña ni códigos 2FA.</div>
+    {% if methods_count > 6 %}<div class="more-methods-note"><b>+{{ methods_count|add:"-6" }}</b><span>métodos adicionales disponibles desde el buscador</span></div>{% endif %}
+    <div class="security-note"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/><path d="M9 12l2 2 4-5"/></svg><span><b>Seguridad HBL</b><small>Nunca pedimos frase semilla, clave privada, contraseña ni códigos 2FA.</small></span></div>
   </section>
 </div>
 
-<section class="panel space-top">
+<section class="panel glass-card space-top history-panel">
   <div class="section-head compact"><div><span class="eyebrow">HISTORIAL</span><h2>Últimas recargas</h2></div></div>
   <div class="table-wrap">
     <table>
@@ -176,7 +152,7 @@
         {% for dep in deposits %}
         <tr>
           <td>{{ dep.submitted_at|date:'d/m/Y H:i' }}</td>
-          <td>{{ dep.ui_icon }} {{ dep.payment_method.label }}</td>
+          <td><span class="history-method"><span class="crypto-coin-icon small" data-symbol="{{ dep.payment_method.currency }}">{{ dep.ui_icon }}</span><b>{{ dep.payment_method.label }}</b></span></td>
           <td>{{ dep.provider_price_amount|default:dep.payment_amount }} USDT</td>
           <td>{% if dep.provider_payment_id %}{{ dep.operation_fee_usdt }} USDT{% else %}—{% endif %}</td>
           <td>{{ dep.payment_amount }} {{ dep.payment_currency }}</td>
@@ -185,7 +161,7 @@
           <td>
             {% if dep.is_partial_payment %}<span>Pago parcial · faltan <b>{{ dep.remaining_payment }} {{ dep.payment_currency }}</b></span>
             {% elif dep.status == 'processing' %}<span class="muted">Esperando confirmación automática</span>
-            {% elif dep.status == 'pending' %}<span class="muted">Verificación de seguridad en curso</span>
+            {% elif dep.status == 'pending' %}<span class="muted">Verificación en curso</span>
             {% elif dep.status == 'approved' %}<span class="positive">Confirmada y acreditada</span>
             {% elif dep.status == 'rejected' %}<span class="negative">No acreditada</span>
             {% elif dep.status == 'expired' %}<span class="muted">Orden expirada</span>{% endif %}
