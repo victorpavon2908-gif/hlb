@@ -17,8 +17,6 @@ logger = logging.getLogger(__name__)
 CATALOG_CACHE_KEY = "hbl:nowpayments:merchant-coins:v2"
 CATALOG_CACHE_SECONDS = 600
 
-# Iconos ligeros sin depender de CDNs externos. Para cualquier moneda no
-# listada, la UI genera una insignia con la primera letra del ticker.
 ICON_MAP = {
     "BTC": "₿", "ETH": "Ξ", "USDT": "₮", "USDC": "◉", "BNB": "◆",
     "SOL": "◎", "TRX": "♦", "LTC": "Ł", "DOGE": "Ð", "ADA": "₳",
@@ -37,8 +35,6 @@ NAME_MAP = {
     "XLM": "Stellar", "ATOM": "Cosmos", "NEAR": "NEAR", "ETC": "Ethereum Classic",
 }
 
-# Los códigos de NOWPayments suelen combinar activo + red, por ejemplo
-# usdttrc20, usdterc20, usdtbsc. Se prueban primero los sufijos largos.
 NETWORK_SUFFIXES = (
     ("trc20", "TRON (TRC20)"),
     ("erc20", "Ethereum (ERC20)"),
@@ -90,7 +86,6 @@ def describe_provider_code(code: str) -> dict:
                     network = network_label
                     break
 
-    # Evita superar el max_length existente de PaymentMethod.currency.
     symbol = symbol[:12] or raw[:12].upper()
     name = NAME_MAP.get(symbol, symbol)
     label = f"{name} · {network}" if network != "Red principal" else name
@@ -108,7 +103,6 @@ def _extract_codes(payload) -> list[str]:
                 values = list(candidate)
                 break
         if not values and all(isinstance(k, str) for k in payload.keys()):
-            # Algunas respuestas pueden usar el ticker como clave.
             values = [k for k, v in payload.items() if v not in (False, None, 0, "")]
     elif isinstance(payload, (list, tuple)):
         values = list(payload)
@@ -122,8 +116,7 @@ def _extract_codes(payload) -> list[str]:
                 item.get("code") or item.get("currency") or item.get("ticker")
                 or item.get("symbol") or item.get("name")
             )
-            enabled = item.get("enabled")
-            if enabled is False:
+            if item.get("enabled") is False:
                 continue
         else:
             code = ""
@@ -151,13 +144,7 @@ def _kind_for(code: str):
 
 
 def sync_nowpayments_methods(*, force: bool = False, client: NowPaymentsClient | None = None) -> int:
-    """Sincroniza en BD todas las monedas activas de la cuenta NOWPayments.
-
-    Se consulta primero ``/merchant/coins`` porque representa lo que realmente
-    puede usar esta cuenta. Si no devuelve una lista utilizable, se intenta el
-    catálogo general ``/currencies``. Un fallo del proveedor nunca borra el
-    catálogo que ya estaba funcionando.
-    """
+    """Sincroniza todas las monedas de pago que NOWPayments tenga disponibles."""
     if not settings.NOWPAYMENTS_API_KEY:
         return 0
     if not force and cache.get(CATALOG_CACHE_KEY):
@@ -167,14 +154,18 @@ def sync_nowpayments_methods(*, force: bool = False, client: NowPaymentsClient |
         ).count()
 
     client = client or NowPaymentsClient()
+    codes = []
     try:
-        payload = client.get_merchant_currencies()
-        codes = _extract_codes(payload)
-        if not codes:
+        codes = _extract_codes(client.get_merchant_currencies())
+    except NowPaymentsError as exc:
+        logger.warning("merchant/coins no disponible; se intentará /currencies: %s", exc)
+
+    if not codes:
+        try:
             codes = _extract_codes(client.get_available_currencies())
-    except NowPaymentsError:
-        logger.exception("No se pudo sincronizar el catálogo NOWPayments")
-        return 0
+        except NowPaymentsError:
+            logger.exception("No se pudo sincronizar el catálogo NOWPayments")
+            return 0
 
     if not codes:
         return 0
@@ -196,7 +187,6 @@ def sync_nowpayments_methods(*, force: bool = False, client: NowPaymentsClient |
             destination=code,
         ).first()
         if not method and kind in {PaymentMethod.Kind.USDT_TRC20, PaymentMethod.Kind.USDT_BEP20}:
-            # Reutiliza las filas históricas TRC20/BEP20 para no duplicarlas.
             method = PaymentMethod.objects.filter(kind=kind).order_by("id").first()
         if not method:
             method = PaymentMethod(kind=kind)
@@ -204,7 +194,7 @@ def sync_nowpayments_methods(*, force: bool = False, client: NowPaymentsClient |
         method.label = meta["label"]
         method.currency = meta["symbol"]
         method.network = meta["network"]
-        method.destination = code  # Código exacto de pay_currency en NOWPayments.
+        method.destination = code
         method.instructions = (
             f"Paga con {meta['symbol']} por {meta['network']}. "
             "NOWPayments generará la dirección, el monto exacto y cualquier memo/tag requerido."
@@ -220,8 +210,6 @@ def sync_nowpayments_methods(*, force: bool = False, client: NowPaymentsClient |
         method.save()
         keep_ids.append(method.pk)
 
-    # Solo desactiva métodos automáticos NOWPayments que ya no aparezcan en el
-    # catálogo válido. Los métodos manuales ajenos a NOWPayments no se tocan.
     PaymentMethod.objects.filter(
         kind__in=[PaymentMethod.Kind.USDT_TRC20, PaymentMethod.Kind.USDT_BEP20, PaymentMethod.Kind.CRYPTO_OTHER],
     ).exclude(pk__in=keep_ids).update(active=False)
