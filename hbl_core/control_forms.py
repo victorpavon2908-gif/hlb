@@ -179,14 +179,18 @@ class PaymentMethodForm(ControlModelForm):
         model = PaymentMethod
         fields = [
             "kind", "label", "currency", "network", "instructions", "min_amount",
-            "max_amount", "balance_rate", "active", "sort_order",
+            "max_amount", "balance_rate", "sender_network_fee_estimate", "active", "sort_order",
         ]
         labels = {
             "kind": "Tipo", "label": "Nombre visible", "currency": "Moneda recibida",
             "network": "Red",
             "instructions": "Instrucciones para el usuario", "min_amount": "Mínimo del método",
             "max_amount": "Máximo del método (0 = sin máximo)", "balance_rate": "Unidades de moneda base por unidad recibida",
+            "sender_network_fee_estimate": "Reserva estimada para comisión de la billetera/red (USDT)",
             "active": "Método activo", "sort_order": "Orden",
+        }
+        help_texts = {
+            "sender_network_fee_estimate": "Solo calcula el saldo recomendado. La tarifa real la determina Binance o la billetera usada por el cliente.",
         }
         help_texts = {
             "balance_rate": "Debe coincidir con la tasa real usada para acreditar saldo. Para monedas administradas en Monedas y tasas, mantén ambas coherentes.",

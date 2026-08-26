@@ -35,6 +35,21 @@
       <strong>Total a enviar: {{ active_payment.payment_amount }} USDT</strong>
       <span>Monto a acreditar: {{ active_payment.provider_price_amount }} USDT</span>
       <span>Comisión estimada: {{ active_payment.provider_fee_amount }} USDT</span>
+      <label for="sender-network-fee"><small>Comisión que muestra tu billetera/red (estimada)</small></label>
+      <input
+        id="sender-network-fee"
+        class="mini-input"
+        type="number"
+        min="0"
+        step="0.00000001"
+        value="{{ active_payment.sender_network_fee_estimate }}"
+        inputmode="decimal"
+      >
+      <strong>
+        Saldo mínimo recomendado en tu billetera:
+        <span id="wallet-balance-required" data-pay-amount="{{ active_payment.payment_amount }}">{{ active_payment.wallet_balance_required }}</span> USDT
+      </strong>
+      <small>Si tu billetera muestra otra tarifa, escríbela arriba. La dirección siempre debe recibir {{ active_payment.payment_amount }} USDT.</small>
       {% if active_payment.provider_actual_paid %}<span>Recibido por NOWPayments: {{ active_payment.provider_actual_paid }} USDT</span>{% endif %}
       <span>{{ active_payment.payment_method.label }} · NOWPayments #{{ active_payment.provider_payment_id }}</span>
       <code id="active-payment-address">{{ active_payment.pay_address }}</code>
@@ -126,7 +141,7 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Fecha</th><th>Método</th><th>A acreditar</th><th>Comisión</th><th>Total a enviar</th><th>Recibido</th><th>Saldo HBL</th><th>Estado</th><th>Validación</th></tr>
+        <tr><th>Fecha</th><th>Método</th><th>A acreditar</th><th>Comisión</th><th>Total a enviar</th><th>Red estimada</th><th>Saldo recomendado</th><th>Recibido</th><th>Saldo HBL</th><th>Estado</th><th>Validación</th></tr>
       </thead>
       <tbody>
         {% for dep in deposits %}
@@ -136,6 +151,8 @@
           <td>{% if dep.provider_payment_id %}{{ dep.provider_price_amount }}{% else %}{{ dep.payment_amount }}{% endif %} {{ dep.payment_currency }}</td>
           <td>{% if dep.provider_payment_id %}{{ dep.provider_fee_amount }} {{ dep.payment_currency }}{% else %}—{% endif %}</td>
           <td>{{ dep.payment_amount }} {{ dep.payment_currency }}</td>
+          <td>{% if dep.provider_payment_id %}{{ dep.sender_network_fee_estimate }} {{ dep.payment_currency }}{% else %}—{% endif %}</td>
+          <td>{% if dep.provider_payment_id %}{{ dep.wallet_balance_required }} {{ dep.payment_currency }}{% else %}{{ dep.payment_amount }} {{ dep.payment_currency }}{% endif %}</td>
           <td>{% if dep.provider_actual_paid %}{{ dep.provider_actual_paid }} {{ dep.payment_currency }}{% elif dep.provider_payment_id %}<span class="muted">Sin informar</span>{% else %}—{% endif %}</td>
           <td>{{ config.base_currency_symbol }} {{ dep.amount }} {{ config.base_currency_code }}</td>
           <td><span class="status {{ dep.status }}">{{ dep.get_status_display }}</span></td>
@@ -156,7 +173,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="9">Sin recargas.</td></tr>
+        <tr><td colspan="11">Sin recargas.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -167,6 +184,18 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+  const networkFeeInput = document.getElementById('sender-network-fee');
+  const walletBalance = document.getElementById('wallet-balance-required');
+  if (networkFeeInput && walletBalance) {
+    const payAmount = Number(walletBalance.dataset.payAmount || 0);
+    const updateWalletBalance = () => {
+      const networkFee = Math.max(0, Number(networkFeeInput.value || 0));
+      walletBalance.textContent = (payAmount + networkFee).toFixed(8);
+    };
+    networkFeeInput.addEventListener('input', updateWalletBalance);
+    updateWalletBalance();
+  }
+
   const url = "{% url 'hbl_crypto_recheck' %}";
   let attempts = 0;
   const maxAttempts = 36;

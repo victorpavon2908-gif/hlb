@@ -55,6 +55,8 @@ El panel de recargas muestra el campo `actually_paid` como **Recibido** y permit
 
 Con `NOWPAYMENTS_FEE_PAID_BY_USER=True`, HBL envía `is_fee_paid_by_user: true`. El usuario escribe el saldo que desea acreditar y NOWPayments agrega dinámicamente sus comisiones al total a enviar. La tarifa de la billetera desde la que el usuario transfiere es externa y debe pagarse aparte para que la dirección reciba el monto exacto.
 
+Cada red de depósito tiene `sender_network_fee_estimate`, editable en **Control → Métodos de recarga**. HBL la suma únicamente para mostrar el **saldo mínimo recomendado en la billetera**; no la añade al monto que recibe la dirección ni al saldo acreditado. El usuario puede reemplazarla en pantalla por la tarifa exacta que muestre Binance o su billetera.
+
 La firma IPN se valida con `x-nowpayments-sig`, HMAC-SHA512 y el secreto IPN. La acreditación es atómica e idempotente para impedir dobles créditos.
 
 ## Reconciliación

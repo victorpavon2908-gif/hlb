@@ -155,8 +155,14 @@ class NowPaymentsDepositTests(TestCase):
         self.assertEqual(deposit.payment_amount, Decimal("101.00000000"))
         self.assertEqual(deposit.provider_price_amount, Decimal("100.00000000"))
         self.assertEqual(deposit.provider_fee_amount, Decimal("1.00000000"))
+        self.assertEqual(deposit.sender_network_fee_estimate, Decimal("1.00000000"))
+        self.assertEqual(deposit.wallet_balance_required, Decimal("102.00000000"))
         self.user.refresh_from_db()
         self.assertEqual(Decimal(self.user.saldo), Decimal("0.00"))
+
+        response = self.client.get(reverse("hbl_wallet"))
+        self.assertContains(response, "Saldo mínimo recomendado en tu billetera")
+        self.assertContains(response, "102.00000000")
 
     def test_only_trc20_and_bep20_are_visible_and_accepted(self):
         response = self.client.get(reverse("hbl_wallet"))

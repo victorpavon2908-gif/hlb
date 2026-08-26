@@ -92,6 +92,7 @@ def wallet(request):
                     payment_amount=requested_usdt,
                     payment_currency="USDT",
                     balance_rate=rate,
+                    sender_network_fee_estimate=method.sender_network_fee_estimate,
                     status=Deposit.Status.PROCESSING,
                     provider=NOWPAYMENTS_PROVIDER,
                     provider_price_amount=requested_usdt,

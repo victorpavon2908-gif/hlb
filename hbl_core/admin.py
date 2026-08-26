@@ -83,7 +83,10 @@ class TrackAdmin(admin.ModelAdmin):
 @admin.register(PaymentMethod)
 class PaymentMethodAdmin(admin.ModelAdmin):
     form = PaymentMethodForm
-    list_display = ("label", "kind", "currency", "network", "min_amount", "max_amount", "balance_rate", "active", "sort_order")
+    list_display = (
+        "label", "kind", "currency", "network", "min_amount", "max_amount",
+        "balance_rate", "sender_network_fee_estimate", "active", "sort_order",
+    )
     list_filter = ("kind", "active")
 
     def get_queryset(self, request):
@@ -101,7 +104,7 @@ class DepositAdmin(admin.ModelAdmin):
         "submitted_at", "processed_at", "merchant_trade_no", "prepay_id",
         "checkout_url", "transaction_id", "provider", "provider_payment_id",
         "provider_status", "provider_price_amount", "provider_fee_amount",
-        "provider_actual_paid", "pay_address",
+        "sender_network_fee_estimate", "provider_actual_paid", "pay_address",
     )
     actions = ("approve_selected", "reject_selected")
 

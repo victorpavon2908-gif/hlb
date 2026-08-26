@@ -304,6 +304,12 @@ class PaymentMethod(models.Model):
         max_digits=18, decimal_places=8, default=Decimal("1.00000000"),
         help_text="Cuántas unidades de moneda base se acreditan por 1 unidad de la moneda de pago.",
     )
+    sender_network_fee_estimate = models.DecimalField(
+        max_digits=18,
+        decimal_places=8,
+        default=Decimal("1.00000000"),
+        help_text="Reserva estimada que la billetera del usuario puede cobrar por enviar. No se transfiere a HBL.",
+    )
     active = models.BooleanField(default=True)
     sort_order = models.PositiveSmallIntegerField(default=10)
 
@@ -314,7 +320,7 @@ class PaymentMethod(models.Model):
         return self.label
 
     def clean(self):
-        for field in ("min_amount", "max_amount", "balance_rate"):
+        for field in ("min_amount", "max_amount", "balance_rate", "sender_network_fee_estimate"):
             if getattr(self, field) < 0:
                 raise ValidationError({field: "No puede ser negativo."})
         if self.balance_rate <= 0:
@@ -352,6 +358,7 @@ class Deposit(models.Model):
     provider_status = models.CharField(max_length=32, blank=True)
     provider_price_amount = models.DecimalField(max_digits=18, decimal_places=8, default=Decimal("0.00000000"))
     provider_fee_amount = models.DecimalField(max_digits=18, decimal_places=8, default=Decimal("0.00000000"))
+    sender_network_fee_estimate = models.DecimalField(max_digits=18, decimal_places=8, default=Decimal("0.00000000"))
     provider_actual_paid = models.DecimalField(max_digits=18, decimal_places=8, blank=True, null=True)
     pay_address = models.CharField(max_length=255, blank=True)
     notes = models.TextField(blank=True)
@@ -373,6 +380,12 @@ class Deposit(models.Model):
                 name="uniq_hbl_provider_payment_id",
             ),
         ]
+
+    @property
+    def wallet_balance_required(self):
+        return (
+            Decimal(self.payment_amount or 0) + Decimal(self.sender_network_fee_estimate or 0)
+        ).quantize(Decimal("0.00000001"))
 
 
 class PayoutAccount(models.Model):

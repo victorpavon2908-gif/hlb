@@ -23,6 +23,8 @@
         <th>A acreditar</th>
         <th>Comisión</th>
         <th>Total a enviar</th>
+        <th>Red estimada</th>
+        <th>Saldo recomendado</th>
         <th>Recibido</th>
         <th>Crédito</th>
         <th>Proveedor</th>
@@ -42,6 +44,8 @@
         </td>
         <td>{% if d.provider_payment_id %}{{ d.provider_fee_amount }} {{ d.payment_currency }}{% else %}—{% endif %}</td>
         <td>{{ d.payment_amount }} {{ d.payment_currency }}</td>
+        <td>{% if d.provider_payment_id %}{{ d.sender_network_fee_estimate }} {{ d.payment_currency }}{% else %}—{% endif %}</td>
+        <td>{% if d.provider_payment_id %}{{ d.wallet_balance_required }} {{ d.payment_currency }}{% else %}{{ d.payment_amount }} {{ d.payment_currency }}{% endif %}</td>
         <td>
           {% if d.provider_actual_paid %}
           <strong>{{ d.provider_actual_paid }} {{ d.payment_currency }}</strong>
@@ -85,7 +89,7 @@
         </td>
       </tr>
       {% empty %}
-      <tr><td colspan="11">Sin recargas.</td></tr>
+      <tr><td colspan="13">Sin recargas.</td></tr>
       {% endfor %}
     </tbody>
   </table>
