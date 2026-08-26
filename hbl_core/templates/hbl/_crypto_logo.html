@@ -1,0 +1,12 @@
+<span class="crypto-logo{% if small %} crypto-logo--small{% endif %}" data-crypto-logo data-symbol="{{ symbol|default:'CRYPTO' }}">
+  <span class="crypto-logo__fallback" aria-hidden="true">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9 9.3h4.1a2 2 0 0 1 0 4H9m0-4v8m0-4h4.7a2 2 0 0 1 0 4H9M11 7v2.3m0 8.1V20"/></svg>
+  </span>
+  <img
+    src="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/{{ symbol|lower }}.png"
+    alt="{{ symbol }}"
+    loading="lazy"
+    decoding="async"
+    data-crypto-logo-img
+  >
+</span>
