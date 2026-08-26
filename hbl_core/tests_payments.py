@@ -26,7 +26,7 @@ User = get_user_model()
     NOWPAYMENTS_API_KEY="test-api-key",
     NOWPAYMENTS_IPN_SECRET="test-ipn-secret",
     NOWPAYMENTS_IPN_CALLBACK_URL="https://example.test/api/pagos/nowpayments/ipn/",
-    NOWPAYMENTS_FEE_PAID_BY_USER=True,
+    NOWPAYMENTS_FEE_PAID_BY_USER=False,
     NOWPAYMENTS_TEST_MODE=False,
     STORAGES={
         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
@@ -56,6 +56,7 @@ class NowPaymentsDepositTests(TestCase):
             min_amount=Decimal("1.00"),
             balance_rate=Decimal("36.62"),
             require_txid=False,
+            sender_network_fee_estimate=Decimal("0"),
             active=True,
         )
         self.bank = PaymentMethod.objects.create(
@@ -73,7 +74,7 @@ class NowPaymentsDepositTests(TestCase):
             "pay_address": "TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE",
             "pay_amount": Decimal("101.00000000"),
             "pay_currency": "usdttrc20",
-            "price_amount": Decimal("100.00000000"),
+            "price_amount": Decimal("101.00000000"),
             "fee_amount": Decimal("1.00000000"),
         }
 
@@ -83,7 +84,7 @@ class NowPaymentsDepositTests(TestCase):
             payment_method=self.trc20,
             amount=Decimal("3662.00"),
             currency="NIO",
-            payment_amount=Decimal("100.00000000"),
+            payment_amount=Decimal("101.00000000"),
             payment_currency="USDT",
             balance_rate=Decimal("36.62"),
             status=Deposit.Status.PROCESSING,
@@ -91,53 +92,60 @@ class NowPaymentsDepositTests(TestCase):
             provider_payment_id=payment_id,
             provider_status="waiting",
             provider_price_amount=Decimal("100.00000000"),
+            provider_fee_amount=Decimal("1.00000000"),
+            sender_network_fee_estimate=Decimal("0"),
             pay_address="TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE",
         )
 
-    def _provider_status(self, deposit, status):
+    def _provider_status(self, deposit, status, *, legacy=False):
+        price = "100.00000000" if legacy else "101.00000000"
         return {
             "payment_id": deposit.provider_payment_id,
             "payment_status": status,
             "order_id": order_id_for(deposit.id),
-            "price_amount": "100.00000000",
+            "price_amount": price,
             "price_currency": "usd",
-            "pay_amount": "100.00000000",
+            "pay_amount": price,
             "pay_currency": "usdttrc20",
-            "actually_paid": "100.00000000",
+            "actually_paid": price,
         }
 
     @patch.object(NowPaymentsClient, "_request")
-    def test_create_payment_assigns_provider_fees_to_user(self, request):
+    def test_create_payment_can_disable_provider_fee_passthrough(self, request):
         request.return_value = {}
         client = NowPaymentsClient(api_key="test-key")
 
         client.create_payment(
-            price_amount=Decimal("10.00"),
+            price_amount=Decimal("11.00"),
             pay_currency="usdtbsc",
             order_id="hbl-deposit:test",
             callback_url="https://example.test/ipn/",
+            fee_paid_by_user=False,
         )
 
         payload = request.call_args.args[2]
-        self.assertTrue(payload["is_fee_paid_by_user"])
-        self.assertEqual(payload["price_amount"], "10.00")
+        self.assertFalse(payload["is_fee_paid_by_user"])
+        self.assertEqual(payload["price_amount"], "11.00")
 
-    def test_provider_returns_total_and_estimated_fee(self):
+    def test_provider_order_adds_exactly_one_usdt_to_requested_credit(self):
         deposit = self._deposit()
         client = MagicMock()
         client.create_payment.return_value = {
             "payment_id": "700010",
             "payment_status": "waiting",
             "pay_address": "TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE",
-            "pay_amount": "101.25000000",
+            "pay_amount": "101.00000000",
             "pay_currency": "usdttrc20",
-            "price_amount": "100.00000000",
+            "price_amount": "101.00000000",
         }
 
         remote = create_payment_for_deposit(deposit, "https://example.test/ipn/", client=client)
 
-        self.assertEqual(remote["pay_amount"], Decimal("101.25000000"))
-        self.assertEqual(remote["fee_amount"], Decimal("1.25000000"))
+        kwargs = client.create_payment.call_args.kwargs
+        self.assertEqual(kwargs["price_amount"], Decimal("101.00000000"))
+        self.assertFalse(kwargs["fee_paid_by_user"])
+        self.assertEqual(remote["pay_amount"], Decimal("101.00000000"))
+        self.assertEqual(remote["fee_amount"], Decimal("1.00000000"))
 
     @patch("hbl_core.payment_views.create_payment_for_deposit")
     def test_wallet_creates_nowpayments_order_without_txid_or_proof(self, create_payment):
@@ -155,14 +163,16 @@ class NowPaymentsDepositTests(TestCase):
         self.assertEqual(deposit.payment_amount, Decimal("101.00000000"))
         self.assertEqual(deposit.provider_price_amount, Decimal("100.00000000"))
         self.assertEqual(deposit.provider_fee_amount, Decimal("1.00000000"))
-        self.assertEqual(deposit.sender_network_fee_estimate, Decimal("1.00000000"))
-        self.assertEqual(deposit.wallet_balance_required, Decimal("102.00000000"))
+        self.assertEqual(deposit.sender_network_fee_estimate, Decimal("0E-8"))
+        self.assertEqual(deposit.wallet_balance_required, Decimal("101.00000000"))
         self.user.refresh_from_db()
         self.assertEqual(Decimal(self.user.saldo), Decimal("0.00"))
 
         response = self.client.get(reverse("hbl_wallet"))
-        self.assertContains(response, "Saldo mínimo recomendado en tu billetera")
-        self.assertContains(response, "102.00000000")
+        self.assertContains(response, "Total exacto a enviar: 101.00000000 USDT")
+        self.assertContains(response, "Cargo fijo HBL")
+        self.assertNotContains(response, "Revisión manual requerida")
+        self.assertNotContains(response, "partially_paid")
 
     def test_only_trc20_and_bep20_are_visible_and_accepted(self):
         response = self.client.get(reverse("hbl_wallet"))
@@ -177,16 +187,16 @@ class NowPaymentsDepositTests(TestCase):
 
     @override_settings(NOWPAYMENTS_TEST_MODE=True, NOWPAYMENTS_TEST_MIN_USDT=Decimal("1"))
     @patch("hbl_core.payment_views.create_payment_for_deposit")
-    def test_test_mode_allows_one_usdt(self, create_payment):
+    def test_test_mode_allows_one_usdt_credit_and_two_usdt_total(self, create_payment):
         self.trc20.min_amount = Decimal("100.00")
         self.trc20.save(update_fields=["min_amount"])
         config = PlatformConfig.get_solo()
         config.minimum_deposit_usd = Decimal("100.00")
         config.save(update_fields=["minimum_deposit_usd"])
         remote = self._remote_created("700099")
-        remote["pay_amount"] = Decimal("1.00000000")
-        remote["price_amount"] = Decimal("1.00000000")
-        remote["fee_amount"] = Decimal("0.00000000")
+        remote["pay_amount"] = Decimal("2.00000000")
+        remote["price_amount"] = Decimal("2.00000000")
+        remote["fee_amount"] = Decimal("1.00000000")
         create_payment.return_value = remote
 
         response = self.client.post(reverse("hbl_wallet"), {
@@ -196,6 +206,8 @@ class NowPaymentsDepositTests(TestCase):
         self.assertEqual(response.status_code, 302)
         deposit = Deposit.objects.get(provider_payment_id="700099")
         self.assertEqual(deposit.provider_price_amount, Decimal("1.00000000"))
+        self.assertEqual(deposit.payment_amount, Decimal("2.00000000"))
+        self.assertEqual(deposit.provider_fee_amount, Decimal("1.00000000"))
 
     def test_confirmed_does_not_credit_until_finished(self):
         deposit = self._deposit()
@@ -217,23 +229,39 @@ class NowPaymentsDepositTests(TestCase):
         self.user.refresh_from_db()
         self.assertEqual(self.user.saldo, Decimal("3662.00"))
 
-    def test_partial_payment_goes_to_manual_review(self):
+    def test_legacy_order_created_before_fixed_fee_can_still_finish(self):
+        deposit = self._deposit("700050")
+        payload = self._provider_status(deposit, "finished", legacy=True)
+        checked, changed = apply_payment_status(deposit.id, payload)
+        self.assertTrue(changed)
+        self.assertEqual(checked.status, Deposit.Status.APPROVED)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.saldo, Decimal("3662.00"))
+
+    def test_partial_payment_stays_active_until_user_completes_it(self):
         deposit = self._deposit()
         payload = self._provider_status(deposit, "partially_paid")
         payload["actually_paid"] = "99.50000000"
         checked, changed = apply_payment_status(deposit.id, payload)
         self.assertFalse(changed)
-        self.assertEqual(checked.status, Deposit.Status.PENDING)
+        self.assertEqual(checked.status, Deposit.Status.PROCESSING)
         self.assertEqual(checked.provider_actual_paid, Decimal("99.50000000"))
-        self.assertIn("Revisión manual", checked.notes)
+        self.assertIn("sigue activa", checked.notes)
+        self.assertNotIn("Revisión manual", checked.notes)
         self.user.refresh_from_db()
         self.assertEqual(self.user.saldo, Decimal("0.00"))
+
+        response = self.client.get(reverse("hbl_wallet"))
+        self.assertContains(response, "Pago parcial recibido")
+        self.assertContains(response, "1.50000000 USDT")
+        self.assertNotContains(response, "partially_paid")
 
         self.user.is_staff = True
         self.user.save(update_fields=["is_staff"])
         response = self.client.get(reverse("hbl_control_deposits"))
         self.assertContains(response, "99.50000000 USDT")
-        self.assertContains(response, "Actualizar proveedor")
+        self.assertContains(response, "Pago parcial")
+        self.assertContains(response, "Actualizar")
 
     @patch("hbl_core.nowpayments.NowPaymentsClient.get_payment")
     def test_staff_can_refresh_partial_amount_from_control(self, get_payment):
@@ -250,7 +278,7 @@ class NowPaymentsDepositTests(TestCase):
 
         self.assertRedirects(response, reverse("hbl_control_deposits"))
         deposit.refresh_from_db()
-        self.assertEqual(deposit.status, Deposit.Status.PENDING)
+        self.assertEqual(deposit.status, Deposit.Status.PROCESSING)
         self.assertEqual(deposit.provider_actual_paid, Decimal("98.75000000"))
         self.user.refresh_from_db()
         self.assertEqual(self.user.saldo, Decimal("0.00"))
@@ -318,3 +346,5 @@ class NowPaymentsDepositTests(TestCase):
             PaymentMethod.Kind.USDT_TRC20,
             PaymentMethod.Kind.USDT_BEP20,
         })
+        for method in PaymentMethod.objects.filter(active=True):
+            self.assertEqual(method.sender_network_fee_estimate, Decimal("0E-8"))
