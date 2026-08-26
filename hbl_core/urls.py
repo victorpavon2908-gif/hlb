@@ -1,13 +1,13 @@
 from django.urls import path
 
-from . import payment_views, views
+from . import payment_views, progressive_plans, views
 
 urlpatterns = [
     path("", views.home, name="hbl_home"),
     path("login/", views.login_view, name="hbl_login"),
     path("logout/", views.logout_view, name="hbl_logout"),
     path("registro/", views.register_view, name="hbl_register"),
-    path("planes/", views.plans, name="hbl_plans"),
+    path("planes/", progressive_plans.plans, name="hbl_plans"),
     path("billetera/", payment_views.wallet, name="hbl_wallet"),
     path("api/billetera/revalidar/", payment_views.recheck_crypto_deposits, name="hbl_crypto_recheck"),
     path("api/pagos/nowpayments/ipn/", payment_views.nowpayments_ipn, name="hbl_nowpayments_ipn"),
