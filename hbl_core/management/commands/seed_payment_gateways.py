@@ -52,13 +52,15 @@ class Command(BaseCommand):
                     "destination": "",
                     "instructions": (
                         f"Envía únicamente USDT por {spec['network_label']}. "
-                        "NOWPayments generará el monto y la dirección exactos para esta orden."
+                        "HBL sumará 1 USDT al monto que deseas acreditar y NOWPayments "
+                        "generará la dirección exacta para la orden."
                     ),
                     "min_amount": min_usdt,
                     "max_amount": Decimal("0"),
                     "require_proof": False,
                     "require_txid": False,
                     "balance_rate": rate,
+                    "sender_network_fee_estimate": Decimal("0"),
                     "active": nowpayments_ready,
                     "sort_order": spec["sort_order"],
                 },
