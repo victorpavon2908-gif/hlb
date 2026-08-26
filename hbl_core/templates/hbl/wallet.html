@@ -32,6 +32,7 @@
     <div class="method-icon">↓</div>
     <div>
       <strong>{{ active_payment.payment_amount }} USDT</strong>
+      {% if active_payment.provider_actual_paid %}<span>Recibido por NOWPayments: {{ active_payment.provider_actual_paid }} USDT</span>{% endif %}
       <span>{{ active_payment.payment_method.label }} · NOWPayments #{{ active_payment.provider_payment_id }}</span>
       <code id="active-payment-address">{{ active_payment.pay_address }}</code>
       <button class="secondary-btn" type="button" data-copy="#active-payment-address" style="width:max-content;min-height:32px;padding:6px 10px;margin-top:5px">
@@ -122,7 +123,7 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Fecha</th><th>Método</th><th>Solicitado</th><th>Saldo HBL</th><th>Estado</th><th>Validación</th></tr>
+        <tr><th>Fecha</th><th>Método</th><th>Solicitado</th><th>Recibido</th><th>Saldo HBL</th><th>Estado</th><th>Validación</th></tr>
       </thead>
       <tbody>
         {% for dep in deposits %}
@@ -130,6 +131,7 @@
           <td>{{ dep.submitted_at|date:'d/m/Y H:i' }}</td>
           <td>{{ dep.payment_method.label }}</td>
           <td>{{ dep.payment_amount }} {{ dep.payment_currency }}</td>
+          <td>{% if dep.provider_actual_paid %}{{ dep.provider_actual_paid }} {{ dep.payment_currency }}{% elif dep.provider_payment_id %}<span class="muted">Sin informar</span>{% else %}—{% endif %}</td>
           <td>{{ config.base_currency_symbol }} {{ dep.amount }} {{ config.base_currency_code }}</td>
           <td><span class="status {{ dep.status }}">{{ dep.get_status_display }}</span></td>
           <td>
@@ -149,7 +151,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="6">Sin recargas.</td></tr>
+        <tr><td colspan="7">Sin recargas.</td></tr>
         {% endfor %}
       </tbody>
     </table>

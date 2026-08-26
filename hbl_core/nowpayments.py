@@ -172,7 +172,7 @@ def _manual_review(deposit: Deposit, provider_status: str, note: str):
     deposit.provider_status = provider_status[:32]
     deposit.status = Deposit.Status.PENDING
     deposit.notes = note
-    deposit.save(update_fields=["provider_status", "status", "notes"])
+    deposit.save(update_fields=["provider_status", "provider_actual_paid", "status", "notes"])
     return deposit, False
 
 
@@ -208,12 +208,23 @@ def apply_payment_status(deposit_id, data: dict):
     if price_amount != Decimal(deposit.provider_price_amount):
         return _manual_review(deposit, provider_status, "El monto informado por NOWPayments no coincide. Revisión manual requerida.")
 
+    actually_paid = data.get("actually_paid")
+    if actually_paid not in (None, ""):
+        try:
+            deposit.provider_actual_paid = _decimal(actually_paid, "actually_paid")
+        except NowPaymentsError:
+            return _manual_review(
+                deposit,
+                provider_status,
+                "NOWPayments informó un monto recibido inválido. Revisión manual requerida.",
+            )
+
     deposit.provider_status = provider_status[:32]
     if provider_status == FINAL_STATUS:
         # Una orden puede recibir el pago después de haber aparecido expirada.
         # La consulta autenticada al proveedor permite reabrirla de forma segura.
         deposit.status = Deposit.Status.PROCESSING
-        deposit.save(update_fields=["provider_status", "status"])
+        deposit.save(update_fields=["provider_status", "provider_actual_paid", "status"])
         return approve_deposit(
             deposit.id,
             transaction_id=deposit.provider_payment_id,
@@ -222,19 +233,19 @@ def apply_payment_status(deposit_id, data: dict):
     if provider_status in IN_PROGRESS_STATUSES:
         deposit.status = Deposit.Status.PROCESSING
         deposit.notes = f"NOWPayments: {provider_status}. Esperando confirmación final."
-        deposit.save(update_fields=["provider_status", "status", "notes"])
+        deposit.save(update_fields=["provider_status", "provider_actual_paid", "status", "notes"])
         return deposit, False
     if provider_status in MANUAL_STATUSES:
         return _manual_review(deposit, provider_status, "Pago parcial detectado por NOWPayments. Revisión manual requerida.")
     if provider_status == "expired":
         deposit.status = Deposit.Status.EXPIRED
         deposit.notes = "La orden de NOWPayments expiró sin finalizarse."
-        deposit.save(update_fields=["provider_status", "status", "notes"])
+        deposit.save(update_fields=["provider_status", "provider_actual_paid", "status", "notes"])
         return deposit, False
     if provider_status in REJECTED_STATUSES:
         deposit.status = Deposit.Status.REJECTED
         deposit.notes = f"NOWPayments marcó el pago como {provider_status}. No se acreditó saldo."
-        deposit.save(update_fields=["provider_status", "status", "notes"])
+        deposit.save(update_fields=["provider_status", "provider_actual_paid", "status", "notes"])
         return deposit, False
     return _manual_review(deposit, provider_status, "Estado desconocido de NOWPayments. Revisión manual requerida.")
 

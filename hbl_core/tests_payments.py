@@ -100,6 +100,7 @@ class NowPaymentsDepositTests(TestCase):
             "price_currency": "usd",
             "pay_amount": "100.00000000",
             "pay_currency": "usdttrc20",
+            "actually_paid": "100.00000000",
         }
 
     @patch("hbl_core.payment_views.create_payment_for_deposit")
@@ -173,10 +174,39 @@ class NowPaymentsDepositTests(TestCase):
 
     def test_partial_payment_goes_to_manual_review(self):
         deposit = self._deposit()
-        checked, changed = apply_payment_status(deposit.id, self._provider_status(deposit, "partially_paid"))
+        payload = self._provider_status(deposit, "partially_paid")
+        payload["actually_paid"] = "99.50000000"
+        checked, changed = apply_payment_status(deposit.id, payload)
         self.assertFalse(changed)
         self.assertEqual(checked.status, Deposit.Status.PENDING)
+        self.assertEqual(checked.provider_actual_paid, Decimal("99.50000000"))
         self.assertIn("Revisión manual", checked.notes)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.saldo, Decimal("0.00"))
+
+        self.user.is_staff = True
+        self.user.save(update_fields=["is_staff"])
+        response = self.client.get(reverse("hbl_control_deposits"))
+        self.assertContains(response, "99.50000000 USDT")
+        self.assertContains(response, "Actualizar proveedor")
+
+    @patch("hbl_core.nowpayments.NowPaymentsClient.get_payment")
+    def test_staff_can_refresh_partial_amount_from_control(self, get_payment):
+        deposit = self._deposit()
+        payload = self._provider_status(deposit, "partially_paid")
+        payload["actually_paid"] = "98.75000000"
+        get_payment.return_value = payload
+        self.user.is_staff = True
+        self.user.save(update_fields=["is_staff"])
+
+        response = self.client.post(
+            reverse("hbl_control_deposit_action", args=[deposit.id, "refresh"]),
+        )
+
+        self.assertRedirects(response, reverse("hbl_control_deposits"))
+        deposit.refresh_from_db()
+        self.assertEqual(deposit.status, Deposit.Status.PENDING)
+        self.assertEqual(deposit.provider_actual_paid, Decimal("98.75000000"))
         self.user.refresh_from_db()
         self.assertEqual(self.user.saldo, Decimal("0.00"))
 

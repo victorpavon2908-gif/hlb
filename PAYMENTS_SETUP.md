@@ -50,6 +50,8 @@ NOWPayments conserva su propio mínimo dinámico según la red y las comisiones.
 
 `waiting`, `confirming`, `confirmed` y `sending` permanecen procesando. `partially_paid` o cualquier inconsistencia pasan a revisión manual. `failed`, `refunded` y `expired` no acreditan saldo.
 
+El panel de recargas muestra el campo `actually_paid` como **Recibido** y permite volver a consultarlo con **Actualizar proveedor** antes de aprobar o rechazar manualmente.
+
 La firma IPN se valida con `x-nowpayments-sig`, HMAC-SHA512 y el secreto IPN. La acreditación es atómica e idempotente para impedir dobles créditos.
 
 ## Reconciliación

@@ -167,7 +167,7 @@ def recheck_crypto_deposits(request):
         Deposit.objects.filter(
             user=request.user,
             provider=NOWPAYMENTS_PROVIDER,
-            status=Deposit.Status.PROCESSING,
+            status__in=[Deposit.Status.PROCESSING, Deposit.Status.PENDING],
             payment_method__kind__in=CRYPTO_KINDS,
         )
         .exclude(provider_payment_id="")

@@ -351,6 +351,7 @@ class Deposit(models.Model):
     provider_payment_id = models.CharField(max_length=80, blank=True, db_index=True)
     provider_status = models.CharField(max_length=32, blank=True)
     provider_price_amount = models.DecimalField(max_digits=18, decimal_places=8, default=Decimal("0.00000000"))
+    provider_actual_paid = models.DecimalField(max_digits=18, decimal_places=8, blank=True, null=True)
     pay_address = models.CharField(max_length=255, blank=True)
     notes = models.TextField(blank=True)
     submitted_at = models.DateTimeField(auto_now_add=True)

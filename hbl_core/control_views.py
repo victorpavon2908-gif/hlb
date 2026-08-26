@@ -51,6 +51,7 @@ from .models import (
     GiftRedemption,
 )
 from .payment_policies import CRYPTO_DEPOSIT_KINDS, CRYPTO_WITHDRAWAL_SLUGS
+from .nowpayments import NOWPAYMENTS_PROVIDER, NowPaymentsError, reconcile_deposit
 from .services import (
     HBLError,
     activate_membership_admin,
@@ -284,6 +285,28 @@ def deposit_action(request, deposit_id, action):
     deposit = get_object_or_404(Deposit, pk=deposit_id)
     try:
         note = (request.POST.get("note") or "").strip()[:240]
+        if action == "refresh":
+            if deposit.provider != NOWPAYMENTS_PROVIDER or not deposit.provider_payment_id:
+                raise HBLError("Esta recarga no pertenece a NOWPayments.")
+            obj, changed = reconcile_deposit(deposit.id)
+            _audit(
+                request,
+                "deposit_provider_refreshed",
+                obj,
+                {
+                    "provider_status": obj.provider_status,
+                    "actually_paid": str(obj.provider_actual_paid or ""),
+                    "credited": bool(changed),
+                },
+            )
+            if obj.provider_actual_paid is None:
+                messages.info(request, "NOWPayments todavía no informó el monto recibido.")
+            else:
+                messages.success(
+                    request,
+                    f"NOWPayments informa {obj.provider_actual_paid} {obj.payment_currency} recibido.",
+                )
+            return redirect("hbl_control_deposits")
         if action == "approve":
             obj, changed = approve_deposit(deposit.id, notes=note or f"Aprobado desde HBL Control por {request.user.id}")
         elif action == "reject":
@@ -295,7 +318,7 @@ def deposit_action(request, deposit_id, action):
         if changed:
             _audit(request, f"deposit_{action}", obj)
         messages.success(request, "Operación aplicada.")
-    except HBLError as exc:
+    except (HBLError, NowPaymentsError) as exc:
         messages.error(request, str(exc))
     return redirect("hbl_control_deposits")
 
