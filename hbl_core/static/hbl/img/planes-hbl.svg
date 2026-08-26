@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="760" viewBox="0 0 1600 760" role="img" aria-labelledby="title desc">
+  <title id="title">Planes HBL</title>
+  <desc id="desc">Imagen visual de los diez planes oficiales de HBL con sus precios en dólares.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#070b18"/><stop offset=".55" stop-color="#0a1124"/><stop offset="1" stop-color="#050914"/></linearGradient>
+    <radialGradient id="glowA"><stop stop-color="#19c9ff" stop-opacity=".32"/><stop offset="1" stop-color="#19c9ff" stop-opacity="0"/></radialGradient>
+    <radialGradient id="glowB"><stop stop-color="#a246ff" stop-opacity=".28"/><stop offset="1" stop-color="#a246ff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="g1"><stop stop-color="#16C8FF"/><stop offset="1" stop-color="#5B7CFF"/></linearGradient>
+    <linearGradient id="g2"><stop stop-color="#10D7C4"/><stop offset="1" stop-color="#43E27D"/></linearGradient>
+    <linearGradient id="g3"><stop stop-color="#8BD52B"/><stop offset="1" stop-color="#35D88B"/></linearGradient>
+    <linearGradient id="g4"><stop stop-color="#F6C526"/><stop offset="1" stop-color="#FF9E2A"/></linearGradient>
+    <linearGradient id="g5"><stop stop-color="#FF8A18"/><stop offset="1" stop-color="#FF5A36"/></linearGradient>
+    <linearGradient id="g6"><stop stop-color="#FF4F9A"/><stop offset="1" stop-color="#E547D8"/></linearGradient>
+    <linearGradient id="g7"><stop stop-color="#B84DFF"/><stop offset="1" stop-color="#7D5CFF"/></linearGradient>
+    <linearGradient id="g8"><stop stop-color="#9D4DFF"/><stop offset="1" stop-color="#C346FF"/></linearGradient>
+    <linearGradient id="g9"><stop stop-color="#FFD34D"/><stop offset="1" stop-color="#FF9E2A"/></linearGradient>
+    <linearGradient id="g10"><stop stop-color="#28D7FF"/><stop offset="1" stop-color="#36F0E0"/></linearGradient>
+    <filter id="shadow"><feDropShadow dx="0" dy="15" stdDeviation="22" flood-color="#000" flood-opacity=".35"/></filter>
+  </defs>
+
+  <rect width="1600" height="760" rx="34" fill="url(#bg)"/>
+  <circle cx="1450" cy="40" r="330" fill="url(#glowA)"/>
+  <circle cx="130" cy="730" r="340" fill="url(#glowB)"/>
+  <path d="M0 115 H1600" stroke="#1a2743"/>
+
+  <g font-family="Inter,Segoe UI,Arial,sans-serif">
+    <text x="70" y="62" fill="#7edfff" font-size="18" font-weight="800" letter-spacing="4">HBL MUSIC REWARDS</text>
+    <text x="70" y="106" fill="#fff" font-size="42" font-weight="900">PLANES HBL</text>
+    <text x="1325" y="75" fill="#92a2bd" font-size="18" text-anchor="end">Elige el nivel que se adapte a ti</text>
+    <text x="1530" y="75" fill="#31ddb0" font-size="18" font-weight="800" text-anchor="end">10 niveles</text>
+
+    <!-- Row 1 -->
+    <g transform="translate(55,155)" filter="url(#shadow)">
+      <rect width="286" height="230" rx="24" fill="#0d1629" stroke="#233554"/>
+      <rect width="286" height="7" rx="4" fill="url(#g1)"/>
+      <circle cx="48" cy="54" r="25" fill="url(#g1)" opacity=".95"/>
+      <text x="48" y="63" text-anchor="middle" fill="#fff" font-size="26">♫</text>
+      <text x="86" y="50" fill="#7edfff" font-size="16" font-weight="800">INICIO HBL</text>
+      <text x="26" y="112" fill="#fff" font-size="28" font-weight="900">BÁSICO</text>
+      <text x="26" y="158" fill="#91a0b8" font-size="15">Precio del plan</text>
+      <text x="26" y="201" fill="#fff" font-size="38" font-weight="900">$20</text>
+    </g>
+    <g transform="translate(356,155)" filter="url(#shadow)">
+      <rect width="286" height="230" rx="24" fill="#0d1629" stroke="#235548"/>
+      <rect width="286" height="7" rx="4" fill="url(#g2)"/>
+      <circle cx="48" cy="54" r="25" fill="url(#g2)"/>
+      <text x="48" y="63" text-anchor="middle" fill="#fff" font-size="26">♫</text>
+      <text x="86" y="50" fill="#62efce" font-size="16" font-weight="800">POPULAR</text>
+      <text x="26" y="112" fill="#fff" font-size="28" font-weight="900">ESTÁNDAR</text>
+      <text x="26" y="158" fill="#91a0b8" font-size="15">Precio del plan</text>
+      <text x="26" y="201" fill="#fff" font-size="38" font-weight="900">$100</text>
+    </g>
+    <g transform="translate(657,155)" filter="url(#shadow)">
+      <rect width="286" height="230" rx="24" fill="#0d1629" stroke="#344d32"/>
+      <rect width="286" height="7" rx="4" fill="url(#g3)"/>
+      <circle cx="48" cy="54" r="25" fill="url(#g3)"/>
+      <text x="48" y="63" text-anchor="middle" fill="#fff" font-size="26">♫</text>
+      <text x="86" y="50" fill="#a6eb55" font-size="16" font-weight="800">AVANZADO</text>
+      <text x="26" y="112" fill="#fff" font-size="28" font-weight="900">AVANZADO</text>
+      <text x="26" y="158" fill="#91a0b8" font-size="15">Precio del plan</text>
+      <text x="26" y="201" fill="#fff" font-size="38" font-weight="900">$300</text>
+    </g>
+    <g transform="translate(958,155)" filter="url(#shadow)">
+      <rect width="286" height="230" rx="24" fill="#0d1629" stroke="#5a4827"/>
+      <rect width="286" height="7" rx="4" fill="url(#g4)"/>
+      <circle cx="48" cy="54" r="25" fill="url(#g4)"/>
+      <text x="48" y="63" text-anchor="middle" fill="#fff" font-size="26">♫</text>
+      <text x="86" y="50" fill="#ffd565" font-size="16" font-weight="800">PREMIUM</text>
+      <text x="26" y="112" fill="#fff" font-size="28" font-weight="900">PREMIUM</text>
+      <text x="26" y="158" fill="#91a0b8" font-size="15">Precio del plan</text>
+      <text x="26" y="201" fill="#fff" font-size="38" font-weight="900">$800</text>
+    </g>
+    <g transform="translate(1259,155)" filter="url(#shadow)">
+      <rect width="286" height="230" rx="24" fill="#0d1629" stroke="#5c3327"/>
+      <rect width="286" height="7" rx="4" fill="url(#g5)"/>
+      <circle cx="48" cy="54" r="25" fill="url(#g5)"/>
+      <text x="48" y="63" text-anchor="middle" fill="#fff" font-size="26">♫</text>
+      <text x="86" y="50" fill="#ff9a59" font-size="16" font-weight="800">EXCLUSIVO</text>
+      <text x="26" y="112" fill="#fff" font-size="28" font-weight="900">EXCLUSIVO</text>
+      <text x="26" y="158" fill="#91a0b8" font-size="15">Precio del plan</text>
+      <text x="26" y="201" fill="#fff" font-size="38" font-weight="900">$1,500</text>
+    </g>
+
+    <!-- Row 2 -->
+    <g transform="translate(55,410)" filter="url(#shadow)">
+      <rect width="286" height="230" rx="24" fill="#0d1629" stroke="#5a2c4b"/>
+      <rect width="286" height="7" rx="4" fill="url(#g6)"/>
+      <circle cx="48" cy="54" r="25" fill="url(#g6)"/>
+      <text x="48" y="63" text-anchor="middle" fill="#fff" font-size="26">♫</text>
+      <text x="86" y="50" fill="#ff82bd" font-size="16" font-weight="800">VIP</text>
+      <text x="26" y="112" fill="#fff" font-size="28" font-weight="900">VIP</text>
+      <text x="26" y="158" fill="#91a0b8" font-size="15">Precio del plan</text>
+      <text x="26" y="201" fill="#fff" font-size="38" font-weight="900">$4,500</text>
+    </g>
+    <g transform="translate(356,410)" filter="url(#shadow)">
+      <rect width="286" height="230" rx="24" fill="#0d1629" stroke="#4f356b"/>
+      <rect width="286" height="7" rx="4" fill="url(#g7)"/>
+      <circle cx="48" cy="54" r="25" fill="url(#g7)"/>
+      <text x="48" y="63" text-anchor="middle" fill="#fff" font-size="26">♫</text>
+      <text x="86" y="50" fill="#c48cff" font-size="16" font-weight="800">ÉLITE</text>
+      <text x="26" y="112" fill="#fff" font-size="28" font-weight="900">ÉLITE</text>
+      <text x="26" y="158" fill="#91a0b8" font-size="15">Precio del plan</text>
+      <text x="26" y="201" fill="#fff" font-size="38" font-weight="900">$10,000</text>
+    </g>
+    <g transform="translate(657,410)" filter="url(#shadow)">
+      <rect width="286" height="230" rx="24" fill="#0d1629" stroke="#57316f"/>
+      <rect width="286" height="7" rx="4" fill="url(#g8)"/>
+      <circle cx="48" cy="54" r="25" fill="url(#g8)"/>
+      <text x="48" y="63" text-anchor="middle" fill="#fff" font-size="26">♫</text>
+      <text x="86" y="50" fill="#d18dff" font-size="16" font-weight="800">MAESTRO</text>
+      <text x="26" y="112" fill="#fff" font-size="28" font-weight="900">MAESTRO</text>
+      <text x="26" y="158" fill="#91a0b8" font-size="15">Precio del plan</text>
+      <text x="26" y="201" fill="#fff" font-size="38" font-weight="900">$20,000</text>
+    </g>
+    <g transform="translate(958,410)" filter="url(#shadow)">
+      <rect width="286" height="230" rx="24" fill="#0d1629" stroke="#6b5429"/>
+      <rect width="286" height="7" rx="4" fill="url(#g9)"/>
+      <circle cx="48" cy="54" r="25" fill="url(#g9)"/>
+      <text x="48" y="63" text-anchor="middle" fill="#fff" font-size="24">★</text>
+      <text x="86" y="50" fill="#ffdc78" font-size="16" font-weight="800">LEYENDA</text>
+      <text x="26" y="112" fill="#fff" font-size="28" font-weight="900">LEYENDA</text>
+      <text x="26" y="158" fill="#91a0b8" font-size="15">Precio del plan</text>
+      <text x="26" y="201" fill="#fff" font-size="38" font-weight="900">$50,000</text>
+    </g>
+    <g transform="translate(1259,410)" filter="url(#shadow)">
+      <rect width="286" height="230" rx="24" fill="#0d1629" stroke="#285a61"/>
+      <rect width="286" height="7" rx="4" fill="url(#g10)"/>
+      <circle cx="48" cy="54" r="25" fill="url(#g10)"/>
+      <text x="48" y="63" text-anchor="middle" fill="#fff" font-size="24">◆</text>
+      <text x="86" y="50" fill="#72f1f4" font-size="16" font-weight="800">DIAMANTE</text>
+      <text x="26" y="112" fill="#fff" font-size="28" font-weight="900">DIAMANTE</text>
+      <text x="26" y="158" fill="#91a0b8" font-size="15">Precio del plan</text>
+      <text x="26" y="201" fill="#fff" font-size="38" font-weight="900">$100,000</text>
+    </g>
+
+    <text x="800" y="704" fill="#8e9bb1" font-size="18" text-anchor="middle">Consulta los detalles de cada nivel antes de activarlo.</text>
+    <text x="800" y="735" fill="#32dfb0" font-size="18" font-weight="800" text-anchor="middle">HBL · ESCUCHA · PARTICIPA · DISFRUTA</text>
+  </g>
+</svg>
