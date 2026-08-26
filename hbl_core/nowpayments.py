@@ -14,6 +14,7 @@ from django.conf import settings
 from django.db import transaction
 
 from .models import Deposit, PaymentMethod
+from .payment_policies import USDT_OPERATION_FEE, usdt_fee_from_total, usdt_total_with_fee
 from .services import approve_deposit
 
 
@@ -23,7 +24,7 @@ PAY_CURRENCY_BY_KIND = {
     PaymentMethod.Kind.USDT_BEP20: "usdtbsc",
 }
 IN_PROGRESS_STATUSES = {"waiting", "confirming", "confirmed", "sending"}
-MANUAL_STATUSES = {"partially_paid"}
+PARTIAL_STATUS = "partially_paid"
 REJECTED_STATUSES = {"failed", "refunded"}
 FINAL_STATUS = "finished"
 
@@ -146,18 +147,24 @@ class NowPaymentsClient:
 
 
 def create_payment_for_deposit(deposit: Deposit, callback_url: str, client: NowPaymentsClient | None = None) -> dict:
-    """Crea el pago remoto y devuelve únicamente datos previamente validados."""
+    """Crea una orden cuyo total incluye siempre 1 USDT sobre el saldo a acreditar."""
     client = client or NowPaymentsClient()
     pay_currency = pay_currency_for_kind(deposit.payment_method.kind)
-    requested_price = _decimal(deposit.provider_price_amount, "price_amount")
-    if requested_price <= 0:
+    requested_credit = _decimal(deposit.provider_price_amount, "price_amount")
+    if requested_credit <= 0:
         raise NowPaymentsError("El monto del depósito debe ser mayor que cero.")
 
+    # HBL acredita requested_credit, pero la orden remota se crea por +1 USDT.
+    # NOWPayments no añade su comisión de servicio al pagador: el cargo fijo HBL
+    # ya está incluido en el precio de la orden. La billetera del usuario todavía
+    # puede cobrar su propia comisión de red por enviar.
+    order_price = usdt_total_with_fee(requested_credit)
     data = client.create_payment(
-        price_amount=requested_price,
+        price_amount=order_price,
         pay_currency=pay_currency,
         order_id=order_id_for(deposit.id),
         callback_url=callback_url,
+        fee_paid_by_user=False,
     )
     payment_id = str(data.get("payment_id") or "").strip()
     pay_address = str(data.get("pay_address") or "").strip()
@@ -166,9 +173,14 @@ def create_payment_for_deposit(deposit: Deposit, callback_url: str, client: NowP
     pay_amount = _decimal(data.get("pay_amount"), "pay_amount")
     if not payment_id.isdigit() or not pay_address or pay_amount <= 0:
         raise NowPaymentsError("NOWPayments no devolvió instrucciones de pago completas.")
-    if returned_currency != pay_currency or returned_price != requested_price:
+    if returned_currency != pay_currency or returned_price != order_price:
         raise NowPaymentsError("NOWPayments devolvió una moneda o monto distinto al solicitado.")
-    fee_amount = max(pay_amount - returned_price, Decimal("0")).quantize(Decimal("0.00000001"))
+
+    total_extra = usdt_fee_from_total(pay_amount, requested_credit)
+    if total_extra < USDT_OPERATION_FEE:
+        # El cargo comercial de HBL es fijo aunque la cotización del proveedor
+        # redondee el pay_amount ligeramente por debajo del price_amount.
+        total_extra = USDT_OPERATION_FEE
 
     return {
         "payment_id": payment_id,
@@ -177,7 +189,7 @@ def create_payment_for_deposit(deposit: Deposit, callback_url: str, client: NowP
         "pay_amount": pay_amount,
         "pay_currency": returned_currency,
         "price_amount": returned_price,
-        "fee_amount": fee_amount,
+        "fee_amount": total_extra.quantize(Decimal("0.00000001")),
     }
 
 
@@ -185,6 +197,18 @@ def _manual_review(deposit: Deposit, provider_status: str, note: str):
     deposit.provider_status = provider_status[:32]
     deposit.status = Deposit.Status.PENDING
     deposit.notes = note
+    deposit.save(update_fields=["provider_status", "provider_actual_paid", "status", "notes"])
+    return deposit, False
+
+
+def _partial_payment(deposit: Deposit, provider_status: str):
+    """Mantiene una orden parcial activa para que pueda completarse normalmente."""
+    deposit.provider_status = provider_status[:32]
+    deposit.status = Deposit.Status.PROCESSING
+    deposit.notes = (
+        "Pago parcial recibido. La orden sigue activa y se acreditará automáticamente "
+        "cuando NOWPayments confirme el total completo."
+    )
     deposit.save(update_fields=["provider_status", "provider_actual_paid", "status", "notes"])
     return deposit, False
 
@@ -209,17 +233,19 @@ def apply_payment_status(deposit_id, data: dict):
     expected_currency = pay_currency_for_kind(deposit.payment_method.kind)
 
     if payment_id != deposit.provider_payment_id:
-        return _manual_review(deposit, provider_status, "El ID del proveedor no coincide. Revisión manual requerida.")
+        return _manual_review(deposit, provider_status, "El ID del proveedor no coincide. Revisión administrativa requerida.")
     if order_id != order_id_for(deposit.id):
-        return _manual_review(deposit, provider_status, "La orden informada por NOWPayments no coincide. Revisión manual requerida.")
+        return _manual_review(deposit, provider_status, "La orden informada por NOWPayments no coincide. Revisión administrativa requerida.")
     if pay_currency != expected_currency:
-        return _manual_review(deposit, provider_status, "La moneda o red informada por NOWPayments no coincide. Revisión manual requerida.")
+        return _manual_review(deposit, provider_status, "La moneda o red informada por NOWPayments no coincide. Revisión administrativa requerida.")
     try:
         price_amount = _decimal(data.get("price_amount"), "price_amount")
     except NowPaymentsError:
-        return _manual_review(deposit, provider_status, "NOWPayments no informó un monto verificable. Revisión manual requerida.")
-    if price_amount != Decimal(deposit.provider_price_amount):
-        return _manual_review(deposit, provider_status, "El monto informado por NOWPayments no coincide. Revisión manual requerida.")
+        return _manual_review(deposit, provider_status, "NOWPayments no informó un monto verificable. Revisión administrativa requerida.")
+
+    expected_price = usdt_total_with_fee(Decimal(deposit.provider_price_amount))
+    if price_amount != expected_price:
+        return _manual_review(deposit, provider_status, "El monto informado por NOWPayments no coincide con la orden HBL. Revisión administrativa requerida.")
 
     actually_paid = data.get("actually_paid")
     if actually_paid not in (None, ""):
@@ -229,7 +255,7 @@ def apply_payment_status(deposit_id, data: dict):
             return _manual_review(
                 deposit,
                 provider_status,
-                "NOWPayments informó un monto recibido inválido. Revisión manual requerida.",
+                "NOWPayments informó un monto recibido inválido. Revisión administrativa requerida.",
             )
 
     deposit.provider_status = provider_status[:32]
@@ -243,13 +269,13 @@ def apply_payment_status(deposit_id, data: dict):
             transaction_id=deposit.provider_payment_id,
             notes="Pago finalizado y confirmado automáticamente por NOWPayments.",
         )
+    if provider_status == PARTIAL_STATUS:
+        return _partial_payment(deposit, provider_status)
     if provider_status in IN_PROGRESS_STATUSES:
         deposit.status = Deposit.Status.PROCESSING
-        deposit.notes = f"NOWPayments: {provider_status}. Esperando confirmación final."
+        deposit.notes = "Pago detectado. Esperando las confirmaciones necesarias de la red."
         deposit.save(update_fields=["provider_status", "provider_actual_paid", "status", "notes"])
         return deposit, False
-    if provider_status in MANUAL_STATUSES:
-        return _manual_review(deposit, provider_status, "Pago parcial detectado por NOWPayments. Revisión manual requerida.")
     if provider_status == "expired":
         deposit.status = Deposit.Status.EXPIRED
         deposit.notes = "La orden de NOWPayments expiró sin finalizarse."
@@ -260,7 +286,7 @@ def apply_payment_status(deposit_id, data: dict):
         deposit.notes = f"NOWPayments marcó el pago como {provider_status}. No se acreditó saldo."
         deposit.save(update_fields=["provider_status", "provider_actual_paid", "status", "notes"])
         return deposit, False
-    return _manual_review(deposit, provider_status, "Estado desconocido de NOWPayments. Revisión manual requerida.")
+    return _manual_review(deposit, provider_status, "Estado no reconocido por NOWPayments. Revisión administrativa requerida.")
 
 
 def reconcile_deposit(deposit_id, client: NowPaymentsClient | None = None):
