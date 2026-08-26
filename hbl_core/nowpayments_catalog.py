@@ -14,8 +14,13 @@ from .nowpayments import NowPaymentsClient, NowPaymentsError
 
 logger = logging.getLogger(__name__)
 
-CATALOG_CACHE_KEY = "hbl:nowpayments:merchant-coins:v2"
-CATALOG_CACHE_SECONDS = 600
+CATALOG_CACHE_KEY = "hbl:nowpayments:merchant-coins:v3"
+CATALOG_CACHE_SECONDS = 3600
+CRYPTO_KINDS = [
+    PaymentMethod.Kind.USDT_TRC20,
+    PaymentMethod.Kind.USDT_BEP20,
+    PaymentMethod.Kind.CRYPTO_OTHER,
+]
 
 ICON_MAP = {
     "BTC": "₿", "ETH": "Ξ", "USDT": "₮", "USDC": "◉", "BNB": "◆",
@@ -126,10 +131,14 @@ def _extract_codes(payload) -> list[str]:
 
 
 def _usdt_rate(config: PlatformConfig) -> Decimal:
-    row = CurrencyRate.objects.filter(code="USDT", active=True).first()
-    if row and Decimal(row.rate_to_base or 0) > 0:
-        return Decimal(row.rate_to_base)
-    usd = CurrencyRate.objects.filter(code="USD", active=True).first()
+    rows = {
+        row.code: row
+        for row in CurrencyRate.objects.filter(code__in=["USDT", "USD"], active=True)
+    }
+    usdt = rows.get("USDT")
+    if usdt and Decimal(usdt.rate_to_base or 0) > 0:
+        return Decimal(usdt.rate_to_base)
+    usd = rows.get("USD")
     if usd and Decimal(usd.rate_to_base or 0) > 0:
         return Decimal(usd.rate_to_base)
     return Decimal(config.exchange_rate_usd_nio)
@@ -144,19 +153,40 @@ def _kind_for(code: str):
 
 
 def _active_count() -> int:
-    return PaymentMethod.objects.filter(
-        active=True,
-        kind__in=[PaymentMethod.Kind.USDT_TRC20, PaymentMethod.Kind.USDT_BEP20, PaymentMethod.Kind.CRYPTO_OTHER],
-    ).count()
+    return PaymentMethod.objects.filter(active=True, kind__in=CRYPTO_KINDS).count()
+
+
+def _apply_method_values(method: PaymentMethod, *, code: str, index: int, min_credit: Decimal, rate: Decimal):
+    meta = describe_provider_code(code)
+    method.kind = _kind_for(code)
+    method.label = meta["label"]
+    method.currency = meta["symbol"]
+    method.network = meta["network"]
+    method.destination = code
+    method.instructions = (
+        f"Paga con {meta['symbol']} por {meta['network']}. "
+        "NOWPayments generará la dirección, el monto exacto y cualquier memo/tag requerido."
+    )
+    method.min_amount = min_credit
+    method.max_amount = Decimal("0")
+    method.require_proof = False
+    method.require_txid = False
+    method.balance_rate = rate
+    method.sender_network_fee_estimate = Decimal("0")
+    method.active = True
+    method.sort_order = 10 + index
+    return method
 
 
 def sync_nowpayments_methods(*, force: bool = False, client: NowPaymentsClient | None = None) -> int:
-    """Sincroniza todas las monedas de pago que NOWPayments tenga disponibles."""
+    """Sincroniza el catálogo NOWPayments con pocas consultas a la base de datos.
+
+    Antes se hacía un ``SELECT`` y un ``SAVE`` por cada criptomoneda. Con cientos
+    de monedas y una base remota eso podía bloquear un worker de Gunicorn hasta
+    superar su timeout. Ahora se precargan los métodos y se persisten por lotes.
+    """
     if not settings.NOWPAYMENTS_API_KEY:
         return 0
-    # GitHub Actions y desarrollo usan DEBUG=True. Nunca deben depender de una
-    # llamada externa para poder ejecutar la suite. force=True queda disponible
-    # para pruebas unitarias explícitas del sincronizador.
     if settings.DEBUG and not force:
         return _active_count()
     if not force and cache.get(CATALOG_CACHE_KEY):
@@ -174,10 +204,10 @@ def sync_nowpayments_methods(*, force: bool = False, client: NowPaymentsClient |
             codes = _extract_codes(client.get_available_currencies())
         except NowPaymentsError:
             logger.exception("No se pudo sincronizar el catálogo NOWPayments")
-            return 0
+            return _active_count()
 
     if not codes:
-        return 0
+        return _active_count()
 
     config = PlatformConfig.get_solo()
     min_credit = (
@@ -186,45 +216,53 @@ def sync_nowpayments_methods(*, force: bool = False, client: NowPaymentsClient |
         else Decimal(config.minimum_deposit_usd)
     )
     rate = _usdt_rate(config)
-    keep_ids = []
+
+    existing = list(PaymentMethod.objects.filter(kind__in=CRYPTO_KINDS).order_by("id"))
+    by_destination = {}
+    base_by_kind = {}
+    for method in existing:
+        destination = _clean_code(method.destination)
+        if destination and destination not in by_destination:
+            by_destination[destination] = method
+        base_by_kind.setdefault(method.kind, method)
+
+    used_ids = set()
+    to_update = []
+    to_create = []
 
     for index, code in enumerate(codes):
-        meta = describe_provider_code(code)
         kind = _kind_for(code)
-        method = PaymentMethod.objects.filter(
-            kind__in=[PaymentMethod.Kind.USDT_TRC20, PaymentMethod.Kind.USDT_BEP20, PaymentMethod.Kind.CRYPTO_OTHER],
-            destination=code,
-        ).first()
-        if not method and kind in {PaymentMethod.Kind.USDT_TRC20, PaymentMethod.Kind.USDT_BEP20}:
-            method = PaymentMethod.objects.filter(kind=kind).order_by("id").first()
-        if not method:
+        method = by_destination.get(code)
+        if method is None and kind in {PaymentMethod.Kind.USDT_TRC20, PaymentMethod.Kind.USDT_BEP20}:
+            candidate = base_by_kind.get(kind)
+            if candidate is not None and candidate.pk not in used_ids:
+                method = candidate
+
+        if method is None:
             method = PaymentMethod(kind=kind)
+            _apply_method_values(method, code=code, index=index, min_credit=min_credit, rate=rate)
+            to_create.append(method)
+        else:
+            used_ids.add(method.pk)
+            _apply_method_values(method, code=code, index=index, min_credit=min_credit, rate=rate)
+            to_update.append(method)
 
-        method.label = meta["label"]
-        method.currency = meta["symbol"]
-        method.network = meta["network"]
-        method.destination = code
-        method.instructions = (
-            f"Paga con {meta['symbol']} por {meta['network']}. "
-            "NOWPayments generará la dirección, el monto exacto y cualquier memo/tag requerido."
-        )
-        method.min_amount = min_credit
-        method.max_amount = Decimal("0")
-        method.require_proof = False
-        method.require_txid = False
-        method.balance_rate = rate
-        method.sender_network_fee_estimate = Decimal("0")
-        method.active = True
-        method.sort_order = 10 + index
-        method.save()
-        keep_ids.append(method.pk)
+    # Una sola desactivación evita que queden métodos antiguos visibles. Después
+    # bulk_update reactiva únicamente los existentes que siguen en el catálogo.
+    PaymentMethod.objects.filter(kind__in=CRYPTO_KINDS).update(active=False)
 
-    PaymentMethod.objects.filter(
-        kind__in=[PaymentMethod.Kind.USDT_TRC20, PaymentMethod.Kind.USDT_BEP20, PaymentMethod.Kind.CRYPTO_OTHER],
-    ).exclude(pk__in=keep_ids).update(active=False)
+    update_fields = [
+        "kind", "label", "currency", "network", "destination", "instructions",
+        "min_amount", "max_amount", "require_proof", "require_txid", "balance_rate",
+        "sender_network_fee_estimate", "active", "sort_order",
+    ]
+    if to_update:
+        PaymentMethod.objects.bulk_update(to_update, update_fields, batch_size=250)
+    if to_create:
+        PaymentMethod.objects.bulk_create(to_create, batch_size=250)
 
     cache.set(CATALOG_CACHE_KEY, True, CATALOG_CACHE_SECONDS)
-    return len(keep_ids)
+    return len(codes)
 
 
 def decorate_method(method: PaymentMethod):
