@@ -47,7 +47,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         # El comando es idempotente: una segunda ejecución NO pisa reglas cambiadas
-        # posteriormente desde HBL Control. Los defaults del modelo se usan al crear.
+        # posteriormente desde HBL Control, salvo las políticas financieras globales
+        # que HBL debe mantener consistentes en todos los despliegues.
         config = PlatformConfig.get_solo()
 
         # Catálogo completo de monedas fiat. Se crean inactivas hasta que administración configure su tasa.
@@ -68,10 +69,13 @@ class Command(BaseCommand):
             code="USD",
             defaults={"name": "US Dollar", "symbol": "$", "rate_to_base": Decimal(config.exchange_rate_usd_nio), "active": True},
         )
-        CurrencyRate.objects.get_or_create(
+        usdt_rate_row, _ = CurrencyRate.objects.get_or_create(
             code="USDT",
             defaults={"name": "Tether USD", "symbol": "₮", "rate_to_base": Decimal(config.exchange_rate_usd_nio), "active": True},
         )
+        usdt_rate = Decimal(usdt_rate_row.rate_to_base or 0)
+        if usdt_rate <= 0:
+            usdt_rate = Decimal(config.exchange_rate_usd_nio)
         for code, label in CRYPTO_CURRENCY_CHOICES:
             if code == "USDT":
                 continue
@@ -125,10 +129,13 @@ class Command(BaseCommand):
                     "account_label": account_label, "identifier_type": identifier_type, "identifier_placeholder": placeholder,
                     "identifier_help": help_text, "holder_required": holder_required,
                     "min_amount_nio": Decimal("0.00"), "max_amount_nio": Decimal("0.00"),
-                    "fee_percent": Decimal("0.00"), "fee_fixed_nio": Decimal("0.00"),
+                    "fee_percent": Decimal("0.00"), "fee_fixed_nio": usdt_rate,
                     "active": True,
                 },
             )
+        # Política HBL: el retiro cobra exactamente 1 USDT adicional. El formulario
+        # suma ese cargo al total reservado para que el usuario reciba el monto neto
+        # que escribió en pantalla.
         WithdrawalMethod.objects.filter(slug="usdt-trc20").update(
             currency_mode=WithdrawalMethod.CurrencyMode.FIXED,
             currency="USDT",
@@ -136,6 +143,8 @@ class Command(BaseCommand):
             network="TRON (TRC20)",
             identifier_type=WithdrawalMethod.IdentifierType.TRC20,
             holder_required=False,
+            fee_percent=Decimal("0.00"),
+            fee_fixed_nio=usdt_rate,
             active=True,
         )
         WithdrawalMethod.objects.filter(slug="usdt-bep20").update(
@@ -145,6 +154,8 @@ class Command(BaseCommand):
             network="BNB Smart Chain (BEP20)",
             identifier_type=WithdrawalMethod.IdentifierType.BEP20,
             holder_required=False,
+            fee_percent=Decimal("0.00"),
+            fee_fixed_nio=usdt_rate,
             active=True,
         )
         WithdrawalMethod.objects.exclude(
