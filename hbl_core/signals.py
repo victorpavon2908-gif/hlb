@@ -1,5 +1,6 @@
 import logging
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
@@ -9,6 +10,10 @@ from .models import Deposit, PaymentMethod, PlatformConfig
 from .payment_policies import CRYPTO_DEPOSIT_KINDS, GLOBAL_MIN_DEPOSIT_USDT
 
 logger = logging.getLogger(__name__)
+
+# Compatibilidad con código/entornos antiguos que todavía consultan esta
+# variable: incluso en modo de prueba el mínimo global sigue siendo 10 USDT.
+settings.NOWPAYMENTS_TEST_MIN_USDT = GLOBAL_MIN_DEPOSIT_USDT
 
 AUTO_KINDS = {
     PaymentMethod.Kind.USDT_TRC20,
