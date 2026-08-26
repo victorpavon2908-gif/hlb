@@ -64,9 +64,17 @@ class Command(BaseCommand):
             method.sort_order = spec["sort_order"]
             method.save()
 
-        # Importante: NO desactivar ni borrar crypto_other. Esas filas son el
-        # catálogo dinámico obtenido de /merchant/coins o /currencies y se
-        # actualizan al abrir la billetera cada 10 minutos.
+        # Se mantienen los crypto_other porque representan el catálogo dinámico.
+        # Los canales antiguos (banco, remesa, etc.) sí quedan fuera de la interfaz
+        # de depósito automático para conservar un único flujo NOWPayments.
+        PaymentMethod.objects.exclude(
+            kind__in=[
+                PaymentMethod.Kind.USDT_TRC20,
+                PaymentMethod.Kind.USDT_BEP20,
+                PaymentMethod.Kind.CRYPTO_OTHER,
+            ]
+        ).update(active=False)
+
         self.stdout.write(self.style.SUCCESS(
             "Métodos base NOWPayments listos. El catálogo completo de criptomonedas se sincroniza dinámicamente en la billetera."
         ))
