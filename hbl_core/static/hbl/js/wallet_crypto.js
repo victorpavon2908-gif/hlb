@@ -3,6 +3,18 @@
     ? document.addEventListener('DOMContentLoaded', fn)
     : fn();
 
+  const markBrokenLogo = (img) => {
+    const wrap = img?.closest?.('[data-crypto-logo]');
+    if (wrap) wrap.classList.add('is-fallback');
+  };
+
+  const initLogoFallbacks = () => {
+    document.querySelectorAll('[data-crypto-logo-img]').forEach((img) => {
+      img.addEventListener('error', () => markBrokenLogo(img), { once: true });
+      if (img.complete && img.naturalWidth === 0) markBrokenLogo(img);
+    });
+  };
+
   const initPicker = () => {
     const picker = document.querySelector('[data-crypto-picker]');
     if (!picker) return;
@@ -12,13 +24,14 @@
     const showAllButton = picker.querySelector('[data-crypto-show-all]');
     const options = [...picker.querySelectorAll('[data-crypto-option]')];
     const empty = picker.querySelector('[data-crypto-empty]');
-    const icon = picker.querySelector('[data-selected-icon]');
+    const selectedLogo = picker.querySelector('[data-selected-logo]');
+    const selectedLogoImg = picker.querySelector('[data-selected-logo-img]');
     const title = picker.querySelector('[data-selected-title]');
     const subtitle = picker.querySelector('[data-selected-subtitle]');
     if (!select || !trigger) return;
 
     let showAll = false;
-    const compactLimit = 6;
+    const compactLimit = 5;
 
     const applyFilter = () => {
       const query = (search?.value || '').trim().toLowerCase();
@@ -26,7 +39,7 @@
       options.forEach((option) => {
         const rank = Number(option.dataset.rank || 9999);
         const matchesQuery = !query || (option.dataset.search || '').includes(query);
-        const allowedByCompact = query || showAll || rank <= compactLimit;
+        const allowedByCompact = Boolean(query || showAll || rank <= compactLimit);
         const visibleNow = Boolean(matchesQuery && allowedByCompact);
         option.hidden = !visibleNow;
         if (visibleNow) visible += 1;
@@ -35,15 +48,30 @@
       if (showAllButton) showAllButton.textContent = showAll ? 'Ver menos' : 'Ver todas';
     };
 
+    const setSelectedLogo = (option) => {
+      if (!selectedLogo || !selectedLogoImg) return;
+      const logoUrl = option?.dataset.logo || '';
+      const symbol = option?.dataset.symbol || '';
+      selectedLogo.dataset.symbol = symbol;
+      selectedLogo.classList.remove('is-fallback');
+      if (!logoUrl) {
+        selectedLogo.classList.add('crypto-logo--placeholder');
+        selectedLogoImg.removeAttribute('src');
+        selectedLogoImg.alt = '';
+        return;
+      }
+      selectedLogo.classList.remove('crypto-logo--placeholder');
+      selectedLogoImg.alt = symbol;
+      selectedLogoImg.onerror = () => selectedLogo.classList.add('is-fallback');
+      selectedLogoImg.src = logoUrl;
+    };
+
     const choose = (option, focusTrigger = true) => {
       if (!option) return;
       select.value = option.dataset.value || '';
       select.dispatchEvent(new Event('change', { bubbles: true }));
       options.forEach((item) => item.classList.toggle('is-selected', item === option));
-      if (icon) {
-        icon.textContent = option.dataset.icon || '◈';
-        icon.dataset.symbol = option.dataset.symbol || '';
-      }
+      setSelectedLogo(option);
       if (title) title.textContent = option.dataset.title || 'Criptomoneda';
       if (subtitle) subtitle.textContent = option.dataset.subtitle || 'NOWPayments';
       picker.classList.remove('open');
@@ -177,6 +205,7 @@
   };
 
   ready(() => {
+    initLogoFallbacks();
     initPicker();
     initTimer();
     initPolling();
