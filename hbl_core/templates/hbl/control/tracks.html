@@ -1,3 +1,152 @@
-{% extends 'hbl/control/base.html' %}{% block title %}Canciones · HBL Control{% endblock %}{% block heading %}Catálogo global de canciones{% endblock %}{% block content %}
-<div class="control-grid-2"><section class="panel"><span class="eyebrow">{% if editing %}EDITAR{% else %}NUEVA{% endif %} CANCIÓN</span><h2>{% if editing %}{{ editing.title }}{% else %}Agregar pista{% endif %}</h2><form method="post" enctype="multipart/form-data" class="form-stack">{% csrf_token %}{% include 'hbl/control/_form_fields.html' with form=form %}<button class="primary-btn">Guardar canción</button>{% if editing %}<a class="secondary-btn inline" href="{% url 'hbl_control_tracks' %}">Cancelar</a>{% endif %}</form></section><section class="panel"><span class="eyebrow">CATÁLOGO GLOBAL</span><h2>Una sola biblioteca para todos los niveles</h2><p class="muted">Las canciones ya no pertenecen a un plan específico. Todos los planes toman sus tareas del mismo catálogo de canciones activas; el nivel solamente define cuántas canciones debe completar el usuario y las demás reglas de su membresía.</p><div class="form-policy control-policy"><b>Renovación diaria.</b> Las tareas se agrupan por la fecha local del usuario. Al cambiar el día, la playlist anterior vence y se genera una nueva al abrir el panel. La verificación global actual exige al menos {{ platform_config.listen_verification_seconds|default:10 }} segundos efectivos. Si una pista tiene un mínimo mayor, HBL exigirá el valor más alto y lo mostrará al cliente.</div></section></div>
-<section class="panel space-top"><h2>Catálogo global</h2><div class="table-wrap"><table><thead><tr><th>Canción</th><th>Mínimo</th><th>Disponibilidad</th><th>Estado</th><th></th></tr></thead><tbody>{% for t in items %}<tr><td><b>{{ t.title }}</b><br><small>{{ t.artist }}</small></td><td>{{ t.min_listen_seconds }}s</td><td>Todos los planes</td><td>{% if t.active %}<span class="status paid">Activa</span>{% else %}<span class="status rejected">Inactiva</span>{% endif %}</td><td><a class="secondary-btn inline" href="{% url 'hbl_control_track_edit' t.id %}">Editar</a></td></tr>{% empty %}<tr><td colspan="5">No hay canciones.</td></tr>{% endfor %}</tbody></table></div></section>{% endblock %}
+{% extends 'hbl/control/base.html' %}
+{% block title %}Canciones · HBL Control{% endblock %}
+{% block heading %}Catálogo global de canciones{% endblock %}
+{% block content %}
+<style>
+.bulk-drop{border:1px dashed rgba(255,255,255,.18);border-radius:18px;padding:20px;background:rgba(255,255,255,.025)}
+.bulk-drop input[type=file]{width:100%;padding:16px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}
+.bulk-grid{display:grid;grid-template-columns:1fr 220px;gap:12px;margin-top:14px}
+.bulk-grid input{width:100%}
+.bulk-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}
+.bulk-progress{height:10px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:14px}.bulk-progress>span{display:block;height:100%;width:0;background:linear-gradient(90deg,#7c5cfc,#25d9a6);transition:width .2s ease}
+.bulk-results{display:grid;gap:7px;margin-top:14px;max-height:260px;overflow:auto}.bulk-result{display:flex;justify-content:space-between;gap:12px;padding:9px 11px;border-radius:12px;background:rgba(255,255,255,.035);font-size:12px}.bulk-result.ok b{color:#25d9a6}.bulk-result.skip b{color:#ffcc75}.bulk-result.error b{color:#ff7f8f}
+@media(max-width:700px){.bulk-grid{grid-template-columns:1fr}}
+</style>
+
+<section class="panel">
+  <span class="eyebrow">CARGA MASIVA</span>
+  <h2>Sube todas tus canciones de una sola vez</h2>
+  <p class="muted">Descomprime el paquete en tu computadora, selecciona todos los archivos de audio y HBL los irá subiendo automáticamente uno por uno. Tú solo haces una selección y un clic. Esto evita enviar un archivo enorme a Render.</p>
+  <div class="bulk-drop">
+    <form id="bulk-upload-form">
+      {% csrf_token %}
+      <label class="field-label" for="bulk-audios"><b>1. Selecciona todas las músicas</b><span>MP3, WAV, OGG, M4A, AAC o FLAC</span></label>
+      <input id="bulk-audios" name="audios" type="file" multiple accept=".mp3,.wav,.ogg,.m4a,.aac,.flac,audio/*">
+      <div class="bulk-grid">
+        <div>
+          <label class="field-label" for="bulk-artist"><b>Artista predeterminado</b><span>Opcional</span></label>
+          <input id="bulk-artist" class="control-input" type="text" maxlength="160" placeholder="Ej. Towball">
+          <small class="helptext">Si el nombre del archivo ya viene como “Artista - Canción”, HBL lo detecta. Si no, usará este artista.</small>
+        </div>
+        <div>
+          <label class="field-label" for="bulk-seconds"><b>Escucha mínima</b><span>Segundos</span></label>
+          <input id="bulk-seconds" class="control-input" type="number" min="5" max="120" value="10">
+        </div>
+      </div>
+      <div class="bulk-actions">
+        <button id="bulk-start" class="primary-btn" type="submit">Subir todas al catálogo</button>
+        <strong id="bulk-status">Selecciona tus archivos.</strong>
+      </div>
+      <div class="bulk-progress"><span id="bulk-progress-bar"></span></div>
+      <div id="bulk-results" class="bulk-results"></div>
+    </form>
+  </div>
+  <div class="form-policy control-policy" style="margin-top:14px"><b>Catálogo global.</b> Estas canciones quedan disponibles para todos los planes. HBL detecta duplicados por título + artista y los omite para no cargarlos dos veces.</div>
+</section>
+
+<div class="control-grid-2 space-top">
+  <section class="panel">
+    <span class="eyebrow">{% if editing %}EDITAR{% else %}INDIVIDUAL{% endif %}</span>
+    <h2>{% if editing %}{{ editing.title }}{% else %}Agregar una sola pista{% endif %}</h2>
+    <form method="post" enctype="multipart/form-data" class="form-stack">
+      {% csrf_token %}
+      {% include 'hbl/control/_form_fields.html' with form=form %}
+      <button class="primary-btn">Guardar canción</button>
+      {% if editing %}<a class="secondary-btn inline" href="{% url 'hbl_control_tracks' %}">Cancelar</a>{% endif %}
+    </form>
+  </section>
+  <section class="panel">
+    <span class="eyebrow">CATÁLOGO GLOBAL</span>
+    <h2>Una sola biblioteca para todos los niveles</h2>
+    <p class="muted">Las canciones no pertenecen a un plan específico. Todos los niveles toman sus tareas del mismo catálogo de canciones activas.</p>
+    <div class="form-policy control-policy"><b>Renovación diaria.</b> HBL genera las tareas desde el catálogo global. El plan solo define cuántas canciones debe completar el usuario y las reglas de su membresía.</div>
+  </section>
+</div>
+
+<section class="panel space-top">
+  <h2>Catálogo global</h2>
+  <div class="table-wrap"><table><thead><tr><th>Canción</th><th>Mínimo</th><th>Disponibilidad</th><th>Estado</th><th></th></tr></thead><tbody>
+    {% for t in items %}
+      <tr><td><b>{{ t.title }}</b><br><small>{{ t.artist|default:'Sin artista' }}</small></td><td>{{ t.min_listen_seconds }}s</td><td>Todos los planes</td><td>{% if t.active %}<span class="status paid">Activa</span>{% else %}<span class="status rejected">Inactiva</span>{% endif %}</td><td><a class="secondary-btn inline" href="{% url 'hbl_control_track_edit' t.id %}">Editar</a></td></tr>
+    {% empty %}<tr><td colspan="5">No hay canciones.</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+
+<script>
+(() => {
+  const form = document.getElementById('bulk-upload-form');
+  const fileInput = document.getElementById('bulk-audios');
+  const artistInput = document.getElementById('bulk-artist');
+  const secondsInput = document.getElementById('bulk-seconds');
+  const startButton = document.getElementById('bulk-start');
+  const status = document.getElementById('bulk-status');
+  const progress = document.getElementById('bulk-progress-bar');
+  const results = document.getElementById('bulk-results');
+  const endpoint = "{% url 'hbl_control_track_bulk_file' %}";
+  const csrf = form.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
+  const allowed = new Set(['mp3','wav','ogg','m4a','aac','flac']);
+
+  const row = (name, message, type) => {
+    const item = document.createElement('div');
+    item.className = `bulk-result ${type}`;
+    const left = document.createElement('span'); left.textContent = name;
+    const right = document.createElement('b'); right.textContent = message;
+    item.append(left, right); results.prepend(item);
+  };
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const files = [...(fileInput.files || [])].filter(file => allowed.has((file.name.split('.').pop() || '').toLowerCase()));
+    if (!files.length) {
+      status.textContent = 'Selecciona al menos un archivo de audio.';
+      return;
+    }
+    startButton.disabled = true;
+    fileInput.disabled = true;
+    results.innerHTML = '';
+    let uploaded = 0, skipped = 0, failed = 0;
+
+    for (let index = 0; index < files.length; index++) {
+      const file = files[index];
+      status.textContent = `Subiendo ${index + 1} de ${files.length}: ${file.name}`;
+      progress.style.width = `${Math.round((index / files.length) * 100)}%`;
+      const data = new FormData();
+      data.append('csrfmiddlewaretoken', csrf);
+      data.append('audio', file);
+      data.append('artist_default', artistInput.value || '');
+      data.append('min_listen_seconds', secondsInput.value || '10');
+      try {
+        const response = await fetch(endpoint, {method:'POST', body:data, credentials:'same-origin'});
+        let payload = {};
+        try { payload = await response.json(); } catch (_) {}
+        if (!response.ok || !payload.ok) {
+          failed++;
+          row(file.name, payload.error || `Error ${response.status}`, 'error');
+        } else if (payload.skipped) {
+          skipped++;
+          row(file.name, 'Duplicada · omitida', 'skip');
+        } else {
+          uploaded++;
+          row(file.name, 'Agregada', 'ok');
+        }
+      } catch (error) {
+        failed++;
+        row(file.name, 'Error de conexión', 'error');
+      }
+      progress.style.width = `${Math.round(((index + 1) / files.length) * 100)}%`;
+    }
+
+    status.textContent = `Listo: ${uploaded} agregadas · ${skipped} duplicadas · ${failed} con error.`;
+    startButton.disabled = false;
+    fileInput.disabled = false;
+    if (uploaded > 0) {
+      const reload = document.createElement('a');
+      reload.className = 'secondary-btn inline';
+      reload.href = window.location.href;
+      reload.textContent = 'Actualizar catálogo';
+      results.prepend(reload);
+    }
+  });
+})();
+</script>
+{% endblock %}
