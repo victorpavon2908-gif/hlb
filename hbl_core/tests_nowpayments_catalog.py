@@ -117,6 +117,46 @@ class NowPaymentsCatalogTests(TestCase):
         self.assertEqual(response.status_code, 200)
         sync_mock.assert_not_called()
 
+    @patch("hbl_core.payment_views.sync_nowpayments_methods")
+    def test_wallet_hides_legacy_unsupported_active_methods(self, sync_mock):
+        PaymentMethod.objects.create(
+            kind=PaymentMethod.Kind.USDT_TRC20,
+            label="Tether TRC20",
+            currency="USDT",
+            network="TRON (TRC20)",
+            destination="usdttrc20",
+            min_amount=Decimal("1"),
+            balance_rate=Decimal("36.62"),
+            active=True,
+        )
+        PaymentMethod.objects.create(
+            kind=PaymentMethod.Kind.CRYPTO_OTHER,
+            label="TRVL",
+            currency="TRVL",
+            network="Red principal",
+            destination="trvl",
+            min_amount=Decimal("1"),
+            balance_rate=Decimal("36.62"),
+            active=True,
+        )
+        PaymentMethod.objects.create(
+            kind=PaymentMethod.Kind.CRYPTO_OTHER,
+            label="CHIP",
+            currency="CHIP",
+            network="Arbitrum",
+            destination="chiparb",
+            min_amount=Decimal("1"),
+            balance_rate=Decimal("36.62"),
+            active=True,
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("hbl_wallet"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "USDT")
+        self.assertNotContains(response, ">TRVL<")
+        self.assertNotContains(response, ">CHIP<")
+        sync_mock.assert_not_called()
+
     def test_non_usdt_payment_uses_provider_crypto_quote(self):
         method = PaymentMethod.objects.create(
             kind=PaymentMethod.Kind.CRYPTO_OTHER,
