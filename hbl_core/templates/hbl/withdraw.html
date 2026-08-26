@@ -5,15 +5,15 @@
   <span class="eyebrow">RETIROS USDT</span>
   <h1>Retira por TRC20 o BEP20.</h1>
   <p>
-    Indica cuánto deseas <b>recibir</b>. HBL suma automáticamente un cargo fijo equivalente a <b>1 USDT</b>
-    al total que se descuenta de tu saldo. Si tu moneda seleccionada es USDT y deseas recibir 10, el total será 11 USDT.
+    Indica cuántos USDT deseas <b>recibir</b>. HBL suma automáticamente <b>1 USDT</b> al total que se reserva de tu saldo.
+    Si deseas recibir <b>10 USDT</b>, el total equivalente a descontar será <b>11 USDT</b>.
   </p>
 </section>
 
 <section class="money-banner">
   <div><small>Saldo disponible</small><strong>{% if preferred_balance != None %}{{ preferred_balance }} {{ preferred_currency }}{% else %}— {{ preferred_currency }}{% endif %}</strong><span>Saldo contable: {{ config.base_currency_symbol }} {{ request.user.saldo }} {{ config.base_currency_code }}</span></div>
   <div><small>Mínimo global</small><strong>{% if withdrawal_min_preferred %}{{ withdrawal_min_preferred }} {{ preferred_currency }}{% else %}{{ config.base_currency_symbol }} {{ config.withdrawal_min }}{% endif %}</strong><span>{{ config.base_currency_symbol }} {{ config.withdrawal_min }} {{ config.base_currency_code }}</span></div>
-  <div><small>Cargo por retiro</small><strong>1 USDT</strong><span>Se suma al total antes de confirmar</span></div>
+  <div><small>Cargo por retiro</small><strong>1 USDT</strong><span>Se suma al monto que deseas recibir</span></div>
 </section>
 
 {% if not withdraw_currency_ready %}
@@ -48,24 +48,25 @@
 
       <div hidden aria-hidden="true">{{ form.amount }}</div>
       <div class="field-row">
-        <label for="desired-withdraw-amount" class="field-label"><span>Monto que deseas recibir ({{ preferred_currency }})</span><span>Obligatorio</span></label>
-        <input id="desired-withdraw-amount" class="hbl-input" type="number" min="0.01" step="0.01" inputmode="decimal" autocomplete="off" placeholder="Ej. 10.00">
-        <small>Este es el monto neto que deseas recibir. HBL agregará el equivalente de 1 USDT al total a descontar.</small>
+        <label for="desired-withdraw-amount" class="field-label"><span>USDT que deseas recibir</span><span>Obligatorio</span></label>
+        <input id="desired-withdraw-amount" class="hbl-input" type="number" min="0.00000001" step="0.00000001" inputmode="decimal" autocomplete="off" placeholder="Ej. 10.00">
+        <small>Escribe el monto neto. Ejemplo: recibes 10 USDT y HBL calcula un total equivalente a 11 USDT.</small>
         {{ form.amount.errors }}
       </div>
 
       <div class="withdraw-summary" id="withdraw-summary" aria-live="polite">
-        <div class="withdraw-summary-row"><span>Deseas recibir</span><b id="sum-requested">— {{ preferred_currency }}</b></div>
-        <div class="withdraw-summary-row"><span>Cargo fijo HBL</span><b id="sum-fee">1 USDT</b></div>
+        <div class="withdraw-summary-row"><span>Deseas recibir</span><b id="sum-requested">— USDT</b></div>
+        <div class="withdraw-summary-row"><span>Cargo fijo HBL</span><b>1 USDT</b></div>
+        <div class="withdraw-summary-row"><span>Total equivalente</span><b id="sum-usdt-total">— USDT</b></div>
         <div class="withdraw-summary-row"><span>Total a descontar</span><b id="sum-base">— {{ preferred_currency }}</b></div>
         <div class="withdraw-summary-row"><span>Mínimo de este método</span><b id="sum-minimum">—</b></div>
-        <div class="withdraw-summary-row net"><span>Recibirás aprox.</span><b id="sum-payout">—</b></div>
-        <small id="sum-note">Selecciona un destino y escribe el monto que deseas recibir para ver el total antes de confirmar.</small>
+        <div class="withdraw-summary-row net"><span>Pago neto</span><b id="sum-payout">— USDT</b></div>
+        <small id="sum-note">Selecciona un destino y escribe los USDT que deseas recibir para ver el total antes de confirmar.</small>
       </div>
 
       <div class="form-policy">
         <b>Antes de confirmar.</b>
-        El monto que ves en “Total a descontar” ya incluye el cargo fijo equivalente a 1 USDT. El saldo queda reservado al enviar la solicitud y la conversión se congela en ese momento.
+        El “Total a descontar” ya incluye el cargo fijo de 1 USDT. El saldo queda reservado al enviar la solicitud y la conversión se congela en ese momento.
       </div>
       <button class="primary-btn glow-btn" type="submit" {% if not withdraw_currency_ready %}disabled{% endif %}>Confirmar retiro</button>
       <noscript><div class="currency-alert">Activa JavaScript para calcular de forma segura el total del retiro.</div></noscript>
@@ -91,7 +92,7 @@
 
 <section class="panel space-top">
   <div class="section-head compact"><div><span class="eyebrow">HISTORIAL</span><h2>Retiros recientes</h2></div></div>
-  <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Red</th><th>Total descontado</th><th>Cargo</th><th>Pago</th><th>Estado</th></tr></thead><tbody>
+  <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Red</th><th>Total descontado</th><th>Cargo</th><th>Pago neto</th><th>Estado</th></tr></thead><tbody>
   {% for item in withdrawals %}
     <tr>
       <td>{{ item.created_at|date:'d/m/Y H:i' }}</td>
@@ -145,61 +146,63 @@
   const fmt = (n, max=2) => Number.isFinite(n) ? new Intl.NumberFormat(undefined,{minimumFractionDigits:2,maximumFractionDigits:max}).format(n) : '—';
   const el = id => document.getElementById(id);
 
-  const calculate = (desired, account) => {
-    if (!account || !Number.isFinite(desired) || desired <= 0 || !preferredRate) return null;
-    const desiredBase = desired * preferredRate;
+  const calculate = (desiredUsdt, account) => {
+    if (!account || !Number.isFinite(desiredUsdt) || desiredUsdt <= 0 || !preferredRate) return null;
+    const payoutRate = Number(account.payout_rate || 0);
+    if (!payoutRate) return null;
+    const desiredBase = desiredUsdt * payoutRate;
     const fixedBase = Math.max(0, Number(account.fee_fixed_base || 0));
     const pct = Math.max(0, Math.min(99.999999, Number(account.fee_percent || 0))) / 100;
     const totalBase = (desiredBase + fixedBase) / (1 - pct);
     const feeBase = Math.max(0, totalBase - desiredBase);
     const totalLocal = totalBase / preferredRate;
-    const payoutRate = Number(account.payout_rate || 0);
-    const payout = payoutRate > 0 ? desiredBase / payoutRate : NaN;
-    return {desiredBase, totalBase, feeBase, totalLocal, payout, fixedBase};
+    const totalUsdt = totalBase / payoutRate;
+    const payout = desiredBase / payoutRate;
+    return {desiredBase, totalBase, feeBase, totalLocal, totalUsdt, payout, payoutRate};
   };
 
   const preview = () => {
     const account = accounts.find(x => String(x.id) === accountSelect?.value);
-    const desired = Number((desiredAmountInput?.value || '').replace(',', '.'));
-    const result = calculate(desired, account);
+    const desiredUsdt = Number((desiredAmountInput?.value || '').replace(',', '.'));
+    const result = calculate(desiredUsdt, account);
     if (!result) {
       if (serverAmountInput) serverAmountInput.value = '';
-      el('sum-requested').textContent = `— ${preferredCurrency}`;
+      el('sum-requested').textContent = '— USDT';
+      el('sum-usdt-total').textContent = '— USDT';
       el('sum-base').textContent = `— ${preferredCurrency}`;
-      el('sum-fee').textContent = '1 USDT';
       el('sum-minimum').textContent = '—';
-      el('sum-payout').textContent = '—';
-      el('sum-note').textContent = 'Selecciona un destino y escribe el monto que deseas recibir para ver el total antes de confirmar.';
+      el('sum-payout').textContent = '— USDT';
+      el('sum-note').textContent = 'Selecciona un destino y escribe los USDT que deseas recibir para ver el total antes de confirmar.';
       return;
     }
 
     if (serverAmountInput) serverAmountInput.value = result.totalLocal.toFixed(2);
     const minBase = Number(account.effective_min_base || 0);
     const minLocal = minBase / preferredRate;
+    const minUsdt = minBase / result.payoutRate;
     const maximum = Number(account.max_base || 0);
-    el('sum-requested').textContent = `${fmt(desired)} ${preferredCurrency}`;
+    el('sum-requested').textContent = `${fmt(desiredUsdt,8)} USDT`;
+    el('sum-usdt-total').textContent = `${fmt(result.totalUsdt,8)} USDT`;
     el('sum-base').textContent = `${fmt(result.totalLocal)} ${preferredCurrency} (${fmt(result.totalBase)} ${baseCurrency})`;
-    el('sum-fee').textContent = `1 USDT (≈ ${fmt(result.feeBase)} ${baseCurrency})`;
-    el('sum-minimum').textContent = `${fmt(minLocal)} ${preferredCurrency} (${fmt(minBase)} ${baseCurrency})`;
-    el('sum-payout').textContent = Number.isFinite(result.payout) ? `${fmt(result.payout,8)} ${account.payout_currency}` : 'Tasa no disponible';
+    el('sum-minimum').textContent = `${fmt(minUsdt,8)} USDT · ${fmt(minLocal)} ${preferredCurrency}`;
+    el('sum-payout').textContent = `${fmt(result.payout,8)} ${account.payout_currency}`;
 
-    let note = `${account.method}: el total ya incluye el cargo fijo de 1 USDT.`;
-    if (result.totalBase < minBase) note = `El total está por debajo del mínimo permitido de ${fmt(minLocal)} ${preferredCurrency}.`;
+    let note = `${account.method}: recibirás ${fmt(result.payout,8)} USDT y el total incluye 1 USDT de cargo HBL.`;
+    if (result.totalBase < minBase) note = `El total está por debajo del mínimo permitido de ${fmt(minUsdt,8)} USDT equivalentes.`;
     else if (maximum > 0 && result.totalBase > maximum) note = 'El total supera el máximo permitido para este método.';
     el('sum-note').textContent = note;
   };
 
-  // Si el servidor devolvió el formulario con un error, reconstruimos el monto
-  // neto desde el total enviado para que el usuario no vea el cargo sumado dos veces.
   const restoreDesiredFromBoundTotal = () => {
     const account = accounts.find(x => String(x.id) === accountSelect?.value);
     const boundTotalLocal = Number((serverAmountInput?.value || '').replace(',', '.'));
-    if (!account || !Number.isFinite(boundTotalLocal) || boundTotalLocal <= 0 || !preferredRate || desiredAmountInput?.value) return;
+    const payoutRate = Number(account?.payout_rate || 0);
+    if (!account || !Number.isFinite(boundTotalLocal) || boundTotalLocal <= 0 || !preferredRate || !payoutRate || desiredAmountInput?.value) return;
     const totalBase = boundTotalLocal * preferredRate;
     const fixedBase = Math.max(0, Number(account.fee_fixed_base || 0));
     const pct = Math.max(0, Math.min(99.999999, Number(account.fee_percent || 0))) / 100;
     const desiredBase = Math.max(0, totalBase - (totalBase * pct) - fixedBase);
-    desiredAmountInput.value = (desiredBase / preferredRate).toFixed(2);
+    desiredAmountInput.value = (desiredBase / payoutRate).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
   };
 
   restoreDesiredFromBoundTotal();
@@ -209,7 +212,7 @@
     preview();
     if (!serverAmountInput?.value || !desiredAmountInput?.value) {
       event.preventDefault();
-      el('sum-note').textContent = 'Completa el destino y el monto que deseas recibir.';
+      el('sum-note').textContent = 'Completa el destino y los USDT que deseas recibir.';
     }
   });
   preview();
