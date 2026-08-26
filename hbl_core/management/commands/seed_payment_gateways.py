@@ -4,6 +4,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from hbl_core.models import CurrencyRate, PaymentMethod, PlatformConfig
+from hbl_core.payment_policies import GLOBAL_MIN_DEPOSIT_USDT
 
 
 class Command(BaseCommand):
@@ -17,11 +18,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         config = PlatformConfig.get_solo()
-        min_usdt = (
-            Decimal(settings.NOWPAYMENTS_TEST_MIN_USDT)
-            if settings.NOWPAYMENTS_TEST_MODE
-            else Decimal(config.minimum_deposit_usd)
-        )
+        min_usdt = GLOBAL_MIN_DEPOSIT_USDT
         rate = self._usdt_rate(config)
         nowpayments_ready = bool(settings.NOWPAYMENTS_API_KEY and settings.NOWPAYMENTS_IPN_SECRET)
 
@@ -52,7 +49,7 @@ class Command(BaseCommand):
             method.destination = spec["provider_code"]
             method.instructions = (
                 f"Paga con USDT por {spec['network_label']}. "
-                "HBL suma 1 USDT al monto que deseas acreditar y NOWPayments genera la orden."
+                "El mínimo a acreditar es 10 USDT y HBL suma 1 USDT al total de la orden."
             )
             method.min_amount = min_usdt
             method.max_amount = Decimal("0")
@@ -76,5 +73,5 @@ class Command(BaseCommand):
         ).update(active=False)
 
         self.stdout.write(self.style.SUCCESS(
-            "Métodos base NOWPayments listos. El catálogo completo de criptomonedas se sincroniza dinámicamente en la billetera."
+            "Métodos base NOWPayments listos con mínimo global de 10 USDT."
         ))
