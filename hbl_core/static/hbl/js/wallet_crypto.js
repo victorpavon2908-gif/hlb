@@ -9,6 +9,7 @@
     const select = picker.querySelector('[data-crypto-native-select]');
     const trigger = picker.querySelector('[data-crypto-trigger]');
     const search = picker.querySelector('[data-crypto-search]');
+    const showAllButton = picker.querySelector('[data-crypto-show-all]');
     const options = [...picker.querySelectorAll('[data-crypto-option]')];
     const empty = picker.querySelector('[data-crypto-empty]');
     const icon = picker.querySelector('[data-selected-icon]');
@@ -16,44 +17,66 @@
     const subtitle = picker.querySelector('[data-selected-subtitle]');
     if (!select || !trigger) return;
 
+    let showAll = false;
+    const compactLimit = 6;
+
+    const applyFilter = () => {
+      const query = (search?.value || '').trim().toLowerCase();
+      let visible = 0;
+      options.forEach((option) => {
+        const rank = Number(option.dataset.rank || 9999);
+        const matchesQuery = !query || (option.dataset.search || '').includes(query);
+        const allowedByCompact = query || showAll || rank <= compactLimit;
+        const visibleNow = Boolean(matchesQuery && allowedByCompact);
+        option.hidden = !visibleNow;
+        if (visibleNow) visible += 1;
+      });
+      if (empty) empty.style.display = visible ? 'none' : 'block';
+      if (showAllButton) showAllButton.textContent = showAll ? 'Ver menos' : 'Ver todas';
+    };
+
     const choose = (option, focusTrigger = true) => {
       if (!option) return;
       select.value = option.dataset.value || '';
       select.dispatchEvent(new Event('change', { bubbles: true }));
       options.forEach((item) => item.classList.toggle('is-selected', item === option));
-      if (icon) icon.textContent = option.dataset.icon || '◈';
+      if (icon) {
+        icon.textContent = option.dataset.icon || '◈';
+        icon.dataset.symbol = option.dataset.symbol || '';
+      }
       if (title) title.textContent = option.dataset.title || 'Criptomoneda';
       if (subtitle) subtitle.textContent = option.dataset.subtitle || 'NOWPayments';
       picker.classList.remove('open');
       trigger.setAttribute('aria-expanded', 'false');
       if (search) search.value = '';
-      options.forEach((item) => { item.hidden = false; });
-      if (empty) empty.style.display = 'none';
+      showAll = false;
+      applyFilter();
       if (focusTrigger) trigger.focus();
     };
 
     const current = options.find((option) => option.dataset.value === select.value);
     if (current) choose(current, false);
+    else applyFilter();
 
     trigger.addEventListener('click', () => {
       const willOpen = !picker.classList.contains('open');
       picker.classList.toggle('open', willOpen);
       trigger.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-      if (willOpen && search) window.setTimeout(() => search.focus(), 20);
+      if (willOpen) {
+        showAll = false;
+        applyFilter();
+        if (search) window.setTimeout(() => search.focus(), 20);
+      }
     });
 
     options.forEach((option) => option.addEventListener('click', () => choose(option)));
 
-    if (search) {
-      search.addEventListener('input', () => {
-        const query = search.value.trim().toLowerCase();
-        let visible = 0;
-        options.forEach((option) => {
-          const match = !query || (option.dataset.search || '').includes(query);
-          option.hidden = !match;
-          if (match) visible += 1;
-        });
-        if (empty) empty.style.display = visible ? 'none' : 'block';
+    if (search) search.addEventListener('input', applyFilter);
+    if (showAllButton) {
+      showAllButton.addEventListener('click', () => {
+        showAll = !showAll;
+        if (showAll && search) search.value = '';
+        applyFilter();
       });
     }
 
