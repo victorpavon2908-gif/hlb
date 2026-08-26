@@ -1,6 +1,7 @@
 from django.urls import path
 
 from . import control_views as views
+from . import track_bulk_views
 
 urlpatterns = [
     path("", views.dashboard, name="hbl_control_dashboard"),
@@ -10,6 +11,7 @@ urlpatterns = [
     path("planes/", views.plans, name="hbl_control_plans"),
     path("planes/<int:plan_id>/", views.plans, name="hbl_control_plan_edit"),
     path("canciones/", views.tracks, name="hbl_control_tracks"),
+    path("canciones/carga-masiva/archivo/", track_bulk_views.upload_track_file, name="hbl_control_track_bulk_file"),
     path("canciones/<int:track_id>/", views.tracks, name="hbl_control_track_edit"),
     path("membresias/", views.memberships, name="hbl_control_memberships"),
     path("membresias/<int:membership_id>/cancelar/", views.membership_cancel, name="hbl_control_membership_cancel"),
