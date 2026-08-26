@@ -41,10 +41,14 @@ def _payment_methods():
 
 def _credit_rate_usdt():
     config = PlatformConfig.get_solo()
-    row = CurrencyRate.objects.filter(code="USDT", active=True).first()
-    if row and Decimal(row.rate_to_base or 0) > 0:
-        return Decimal(row.rate_to_base)
-    usd = CurrencyRate.objects.filter(code="USD", active=True).first()
+    rows = {
+        row.code: row
+        for row in CurrencyRate.objects.filter(code__in=["USDT", "USD"], active=True)
+    }
+    usdt = rows.get("USDT")
+    if usdt and Decimal(usdt.rate_to_base or 0) > 0:
+        return Decimal(usdt.rate_to_base)
+    usd = rows.get("USD")
     if usd and Decimal(usd.rate_to_base or 0) > 0:
         return Decimal(usd.rate_to_base)
     return Decimal(config.exchange_rate_usd_nio or 0)
@@ -85,7 +89,7 @@ def _decorate_deposit_for_ui(deposit, provider_data=None):
 
 
 def _refresh_active_metadata(deposit):
-    """Trae fecha real de expiración y memo/tag en producción."""
+    """Actualización explícita de metadata; no se usa en el render normal de la billetera."""
     if not deposit or not deposit.provider_payment_id or not _integration_ready() or settings.DEBUG:
         return _decorate_deposit_for_ui(deposit)
     try:
@@ -113,13 +117,18 @@ def _refresh_active_metadata(deposit):
 
 @login_required
 def wallet(request):
-    if _integration_ready():
+    # La billetera nunca debe sincronizar cientos de monedas dentro de una
+    # petición normal. Render mataba el worker mientras el sincronizador hacía
+    # consultas repetidas contra la base remota. El catálogo completo se carga
+    # durante el deploy; aquí solo hacemos un rescate si la tabla quedó vacía.
+    methods = list(_payment_methods())
+    if _integration_ready() and not methods:
         try:
             sync_nowpayments_methods()
         except Exception:
-            logger.exception("No se pudo sincronizar el catálogo NOWPayments al abrir la billetera")
+            logger.exception("No se pudo recuperar el catálogo NOWPayments vacío")
+        methods = list(_payment_methods())
 
-    methods = list(_payment_methods())
     for method in methods:
         decorate_method(method)
 
@@ -192,7 +201,9 @@ def wallet(request):
         .select_related("payment_method")
         .first()
     )
-    _refresh_active_metadata(active_payment)
+    # La fecha de expiración/memo ya se guardan al crear la orden. No hacemos
+    # una llamada externa a NOWPayments durante cada GET de /billetera/.
+    _decorate_deposit_for_ui(active_payment)
 
     ledger = RewardLedger.objects.filter(user=request.user)[:15]
     config = PlatformConfig.get_solo()
