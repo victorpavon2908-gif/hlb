@@ -3,18 +3,21 @@
 {% block content %}
 <section class="page-title compact-title">
   <span class="eyebrow">RETIROS USDT</span>
-  <h1>Retira únicamente por TRC20 o BEP20.</h1>
-  <p>Escribes el monto en <b>{{ preferred_currency }}</b>; HBL calcula el equivalente en USDT. La red se detecta automáticamente al pegar la dirección y el pago queda sujeto a revisión manual.</p>
+  <h1>Retira por TRC20 o BEP20.</h1>
+  <p>
+    Indica cuánto deseas <b>recibir</b>. HBL suma automáticamente un cargo fijo equivalente a <b>1 USDT</b>
+    al total que se descuenta de tu saldo. Si tu moneda seleccionada es USDT y deseas recibir 10, el total será 11 USDT.
+  </p>
 </section>
 
 <section class="money-banner">
   <div><small>Saldo disponible</small><strong>{% if preferred_balance != None %}{{ preferred_balance }} {{ preferred_currency }}{% else %}— {{ preferred_currency }}{% endif %}</strong><span>Saldo contable: {{ config.base_currency_symbol }} {{ request.user.saldo }} {{ config.base_currency_code }}</span></div>
   <div><small>Mínimo global</small><strong>{% if withdrawal_min_preferred %}{{ withdrawal_min_preferred }} {{ preferred_currency }}{% else %}{{ config.base_currency_symbol }} {{ config.withdrawal_min }}{% endif %}</strong><span>{{ config.base_currency_symbol }} {{ config.withdrawal_min }} {{ config.base_currency_code }}</span></div>
-  <div><small>Moneda para indicar el monto</small><strong>{{ preferred_currency }}</strong><span>El pago final se realiza en USDT</span></div>
+  <div><small>Cargo por retiro</small><strong>1 USDT</strong><span>Se suma al total antes de confirmar</span></div>
 </section>
 
 {% if not withdraw_currency_ready %}
-<div class="currency-alert"><b>Retiros temporalmente no disponibles en {{ preferred_currency }}.</b> Administración debe activar una tasa válida para esta moneda antes de permitir conversiones.</div>
+<div class="currency-alert"><b>Retiros no disponibles por el momento.</b> No pudimos calcular la conversión para {{ preferred_currency }}. Intenta nuevamente más tarde.</div>
 {% endif %}
 
 <div class="method-strip" aria-label="Métodos de retiro disponibles">
@@ -26,7 +29,7 @@
       <small>Paga en USDT{% if method.network %} · {{ method.network }}{% endif %}</small>
     </div>
   </div>
-{% empty %}<span class="muted">No hay métodos de retiro habilitados para tu país.</span>{% endfor %}
+{% empty %}<span class="muted">No hay métodos de retiro disponibles en este momento.</span>{% endfor %}
 </div>
 
 <div class="two-col withdrawal-layout">
@@ -35,26 +38,37 @@
     <form method="post" class="form-stack" id="withdraw-form" novalidate>
       {% csrf_token %}<input type="hidden" name="action" value="withdraw">
       {{ form.non_field_errors }}
-      {% for field in form %}
+
       <div class="field-row">
-        <label for="{{ field.id_for_label }}" class="field-label"><span>{{ field.label }}</span>{% if field.field.required %}<span>Obligatorio</span>{% endif %}</label>
-        {{ field }}
-        {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
-        {{ field.errors }}
+        <label for="{{ form.payout_account.id_for_label }}" class="field-label"><span>{{ form.payout_account.label }}</span><span>Obligatorio</span></label>
+        {{ form.payout_account }}
+        {% if form.payout_account.help_text %}<small>{{ form.payout_account.help_text }}</small>{% endif %}
+        {{ form.payout_account.errors }}
       </div>
-      {% endfor %}
+
+      <div hidden aria-hidden="true">{{ form.amount }}</div>
+      <div class="field-row">
+        <label for="desired-withdraw-amount" class="field-label"><span>Monto que deseas recibir ({{ preferred_currency }})</span><span>Obligatorio</span></label>
+        <input id="desired-withdraw-amount" class="hbl-input" type="number" min="0.01" step="0.01" inputmode="decimal" autocomplete="off" placeholder="Ej. 10.00">
+        <small>Este es el monto neto que deseas recibir. HBL agregará el equivalente de 1 USDT al total a descontar.</small>
+        {{ form.amount.errors }}
+      </div>
 
       <div class="withdraw-summary" id="withdraw-summary" aria-live="polite">
-        <div class="withdraw-summary-row"><span>Solicitas</span><b id="sum-requested">— {{ preferred_currency }}</b></div>
-        <div class="withdraw-summary-row"><span>Equivalente contable</span><b id="sum-base">— {{ config.base_currency_code }}</b></div>
-        <div class="withdraw-summary-row"><span>Comisión estimada</span><b id="sum-fee">— {{ config.base_currency_code }}</b></div>
+        <div class="withdraw-summary-row"><span>Deseas recibir</span><b id="sum-requested">— {{ preferred_currency }}</b></div>
+        <div class="withdraw-summary-row"><span>Cargo fijo HBL</span><b id="sum-fee">1 USDT</b></div>
+        <div class="withdraw-summary-row"><span>Total a descontar</span><b id="sum-base">— {{ preferred_currency }}</b></div>
         <div class="withdraw-summary-row"><span>Mínimo de este método</span><b id="sum-minimum">—</b></div>
         <div class="withdraw-summary-row net"><span>Recibirás aprox.</span><b id="sum-payout">—</b></div>
-        <small id="sum-note">Selecciona un destino y escribe el monto para ver la conversión antes de confirmar.</small>
+        <small id="sum-note">Selecciona un destino y escribe el monto que deseas recibir para ver el total antes de confirmar.</small>
       </div>
 
-      <div class="form-policy"><b>Política de retiro.</b> El saldo se reserva al enviar la solicitud. El mínimo efectivo es el mayor entre el mínimo global y el del método. La tasa, comisión y monto a pagar quedan congelados al crear la solicitud.</div>
-      <button class="primary-btn glow-btn" type="submit" {% if not withdraw_currency_ready %}disabled{% endif %}>Confirmar solicitud de retiro</button>
+      <div class="form-policy">
+        <b>Antes de confirmar.</b>
+        El monto que ves en “Total a descontar” ya incluye el cargo fijo equivalente a 1 USDT. El saldo queda reservado al enviar la solicitud y la conversión se congela en ese momento.
+      </div>
+      <button class="primary-btn glow-btn" type="submit" {% if not withdraw_currency_ready %}disabled{% endif %}>Confirmar retiro</button>
+      <noscript><div class="currency-alert">Activa JavaScript para calcular de forma segura el total del retiro.</div></noscript>
     </form>
   </section>
 
@@ -66,7 +80,7 @@
       {{ account_form.non_field_errors }}
       <div class="field-row"><label class="field-label" for="{{ account_form.label.id_for_label }}"><span>{{ account_form.label.label }}</span><span>Ej. “Mi wallet”</span></label>{{ account_form.label }}{{ account_form.label.errors }}</div>
       <div class="field-row"><label class="field-label" for="{{ account_form.holder_name.id_for_label }}"><span>{{ account_form.holder_name.label }}</span><span>Opcional</span></label>{{ account_form.holder_name }}{{ account_form.holder_name.errors }}</div>
-      <div class="field-row"><label class="field-label" for="{{ account_form.identifier.id_for_label }}"><span>{{ account_form.identifier.label }}</span><span>Obligatorio</span></label>{{ account_form.identifier }}<small id="identifier-help-text">Red pendiente de detectar.</small>{{ account_form.identifier.errors }}</div>
+      <div class="field-row"><label class="field-label" for="{{ account_form.identifier.id_for_label }}"><span>{{ account_form.identifier.label }}</span><span>Obligatorio</span></label>{{ account_form.identifier }}<small id="identifier-help-text">Escribe la dirección para detectar la red.</small>{{ account_form.identifier.errors }}</div>
       <div id="withdrawal-method-hint" class="method-hint" hidden></div>
       <label class="check-label">{{ account_form.is_default }} <span>{{ account_form.is_default.label }}</span></label>{{ account_form.is_default.errors }}
       <div class="form-policy"><b>Seguridad.</b> Verifica la dirección antes de guardar. HBL nunca te pedirá frase semilla, clave privada, contraseña ni código 2FA.</div>
@@ -77,14 +91,14 @@
 
 <section class="panel space-top">
   <div class="section-head compact"><div><span class="eyebrow">HISTORIAL</span><h2>Retiros recientes</h2></div></div>
-  <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Método</th><th>Solicitado</th><th>Base / comisión</th><th>Pago final</th><th>Estado</th></tr></thead><tbody>
+  <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Red</th><th>Total descontado</th><th>Cargo</th><th>Pago</th><th>Estado</th></tr></thead><tbody>
   {% for item in withdrawals %}
     <tr>
       <td>{{ item.created_at|date:'d/m/Y H:i' }}</td>
       <td><b>{{ item.payout_label }}</b>{% if item.payout_network %}<br><small>{{ item.payout_network }}</small>{% endif %}</td>
       <td>{{ item.requested_amount|floatformat:2 }} {{ item.requested_currency }}</td>
-      <td>{{ item.base_currency }} {{ item.amount|floatformat:2 }}<br><small>Comisión {{ item.base_currency }} {{ item.fee|floatformat:2 }}</small></td>
-      <td><b>{{ item.payout_amount|floatformat:8 }} {{ item.payout_currency }}</b><br><small>Neto base {{ item.net_amount|floatformat:2 }}</small></td>
+      <td>{{ item.base_currency }} {{ item.fee|floatformat:2 }}</td>
+      <td><b>{{ item.payout_amount|floatformat:8 }} {{ item.payout_currency }}</b></td>
       <td><span class="status {{ item.status }}">{{ item.get_status_display }}</span></td>
     </tr>
   {% empty %}<tr><td colspan="6">Todavía no tienes retiros.</td></tr>{% endfor %}
@@ -115,50 +129,89 @@
       hint.replaceChildren();
       if (network) {
         const strong = document.createElement('b'); strong.textContent = `${network} detectada`; hint.appendChild(strong);
-        const span = document.createElement('span'); span.textContent = 'El servidor volverá a validar el formato antes de guardar.'; hint.appendChild(span);
+        const span = document.createElement('span'); span.textContent = 'Revisa la dirección completa antes de guardarla.'; hint.appendChild(span);
       }
     }
   };
   identifier?.addEventListener('input', detectWalletNetwork); detectWalletNetwork();
 
+  const form = document.getElementById('withdraw-form');
   const accountSelect = document.getElementById('id_payout_account');
-  const amountInput = document.getElementById('id_amount');
+  const serverAmountInput = document.getElementById('id_amount');
+  const desiredAmountInput = document.getElementById('desired-withdraw-amount');
   const preferredRate = Number('{{ preferred_rate|default:0 }}'.replace(',', '.'));
   const preferredCurrency = '{{ preferred_currency|escapejs }}';
   const baseCurrency = '{{ config.base_currency_code|escapejs }}';
   const fmt = (n, max=2) => Number.isFinite(n) ? new Intl.NumberFormat(undefined,{minimumFractionDigits:2,maximumFractionDigits:max}).format(n) : '—';
   const el = id => document.getElementById(id);
+
+  const calculate = (desired, account) => {
+    if (!account || !Number.isFinite(desired) || desired <= 0 || !preferredRate) return null;
+    const desiredBase = desired * preferredRate;
+    const fixedBase = Math.max(0, Number(account.fee_fixed_base || 0));
+    const pct = Math.max(0, Math.min(99.999999, Number(account.fee_percent || 0))) / 100;
+    const totalBase = (desiredBase + fixedBase) / (1 - pct);
+    const feeBase = Math.max(0, totalBase - desiredBase);
+    const totalLocal = totalBase / preferredRate;
+    const payoutRate = Number(account.payout_rate || 0);
+    const payout = payoutRate > 0 ? desiredBase / payoutRate : NaN;
+    return {desiredBase, totalBase, feeBase, totalLocal, payout, fixedBase};
+  };
+
   const preview = () => {
     const account = accounts.find(x => String(x.id) === accountSelect?.value);
-    const requested = Number((amountInput?.value || '').replace(',', '.'));
-    if (!account || !Number.isFinite(requested) || requested <= 0 || !preferredRate) {
+    const desired = Number((desiredAmountInput?.value || '').replace(',', '.'));
+    const result = calculate(desired, account);
+    if (!result) {
+      if (serverAmountInput) serverAmountInput.value = '';
       el('sum-requested').textContent = `— ${preferredCurrency}`;
-      el('sum-base').textContent = `— ${baseCurrency}`;
-      el('sum-fee').textContent = `— ${baseCurrency}`;
+      el('sum-base').textContent = `— ${preferredCurrency}`;
+      el('sum-fee').textContent = '1 USDT';
       el('sum-minimum').textContent = '—';
       el('sum-payout').textContent = '—';
+      el('sum-note').textContent = 'Selecciona un destino y escribe el monto que deseas recibir para ver el total antes de confirmar.';
       return;
     }
-    const base = requested * preferredRate;
-    const fee = (base * Number(account.fee_percent || 0) / 100) + Number(account.fee_fixed_base || 0);
-    const net = Math.max(0, base - fee);
-    const payoutRate = Number(account.payout_rate || 0);
-    const payout = payoutRate > 0 ? net / payoutRate : NaN;
+
+    if (serverAmountInput) serverAmountInput.value = result.totalLocal.toFixed(2);
     const minBase = Number(account.effective_min_base || 0);
     const minLocal = minBase / preferredRate;
-    el('sum-requested').textContent = `${fmt(requested)} ${preferredCurrency}`;
-    el('sum-base').textContent = `${fmt(base)} ${baseCurrency}`;
-    el('sum-fee').textContent = `${fmt(fee)} ${baseCurrency}`;
-    el('sum-minimum').textContent = `${fmt(minLocal)} ${preferredCurrency} (${fmt(minBase)} ${baseCurrency})`;
-    el('sum-payout').textContent = Number.isFinite(payout) ? `${fmt(payout,8)} ${account.payout_currency}` : 'Tasa no disponible';
     const maximum = Number(account.max_base || 0);
-    let note = `${account.method}: la tasa y la comisión definitivas se validan otra vez en el servidor.`;
-    if (base < minBase) note = `El monto está por debajo del mínimo de ${fmt(minLocal)} ${preferredCurrency}.`;
-    else if (maximum > 0 && base > maximum) note = `El monto supera el máximo permitido para este método.`;
+    el('sum-requested').textContent = `${fmt(desired)} ${preferredCurrency}`;
+    el('sum-base').textContent = `${fmt(result.totalLocal)} ${preferredCurrency} (${fmt(result.totalBase)} ${baseCurrency})`;
+    el('sum-fee').textContent = `1 USDT (≈ ${fmt(result.feeBase)} ${baseCurrency})`;
+    el('sum-minimum').textContent = `${fmt(minLocal)} ${preferredCurrency} (${fmt(minBase)} ${baseCurrency})`;
+    el('sum-payout').textContent = Number.isFinite(result.payout) ? `${fmt(result.payout,8)} ${account.payout_currency}` : 'Tasa no disponible';
+
+    let note = `${account.method}: el total ya incluye el cargo fijo de 1 USDT.`;
+    if (result.totalBase < minBase) note = `El total está por debajo del mínimo permitido de ${fmt(minLocal)} ${preferredCurrency}.`;
+    else if (maximum > 0 && result.totalBase > maximum) note = 'El total supera el máximo permitido para este método.';
     el('sum-note').textContent = note;
   };
+
+  // Si el servidor devolvió el formulario con un error, reconstruimos el monto
+  // neto desde el total enviado para que el usuario no vea el cargo sumado dos veces.
+  const restoreDesiredFromBoundTotal = () => {
+    const account = accounts.find(x => String(x.id) === accountSelect?.value);
+    const boundTotalLocal = Number((serverAmountInput?.value || '').replace(',', '.'));
+    if (!account || !Number.isFinite(boundTotalLocal) || boundTotalLocal <= 0 || !preferredRate || desiredAmountInput?.value) return;
+    const totalBase = boundTotalLocal * preferredRate;
+    const fixedBase = Math.max(0, Number(account.fee_fixed_base || 0));
+    const pct = Math.max(0, Math.min(99.999999, Number(account.fee_percent || 0))) / 100;
+    const desiredBase = Math.max(0, totalBase - (totalBase * pct) - fixedBase);
+    desiredAmountInput.value = (desiredBase / preferredRate).toFixed(2);
+  };
+
+  restoreDesiredFromBoundTotal();
   accountSelect?.addEventListener('change', preview);
-  amountInput?.addEventListener('input', preview);
+  desiredAmountInput?.addEventListener('input', preview);
+  form?.addEventListener('submit', (event) => {
+    preview();
+    if (!serverAmountInput?.value || !desiredAmountInput?.value) {
+      event.preventDefault();
+      el('sum-note').textContent = 'Completa el destino y el monto que deseas recibir.';
+    }
+  });
   preview();
 })();
 </script>
