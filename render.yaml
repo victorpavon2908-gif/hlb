@@ -17,7 +17,7 @@ services:
       - key: ENABLE_HSTS
         value: "True"
       - key: NOWPAYMENTS_FEE_PAID_BY_USER
-        value: "True"
+        value: "False"
       - key: DATABASE_URL
         fromDatabase:
           name: hbl-db
