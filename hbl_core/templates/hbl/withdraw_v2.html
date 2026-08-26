@@ -1,0 +1,236 @@
+{% extends 'hbl/base.html' %}
+{% block title %}Retiros USDT · HBL{% endblock %}
+
+{% block head %}
+<style>
+  .wd-page{max-width:1160px;margin:0 auto;padding-bottom:30px}
+  .wd-hero{padding:28px;border-radius:26px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(135deg,rgba(29,39,64,.97),rgba(10,15,27,.97));box-shadow:0 18px 55px rgba(0,0,0,.2)}
+  .wd-hero h1{margin:7px 0 9px;font-size:clamp(30px,4vw,46px);line-height:1.05}.wd-hero p{max-width:780px;margin:0;color:var(--muted,#95a0b6);line-height:1.6}
+  .wd-badges{display:flex;gap:9px;flex-wrap:wrap;margin-top:17px}.wd-badge{padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08);font-size:12px;font-weight:800}
+  .wd-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;margin:16px 0}.wd-stat{padding:16px 17px;border-radius:18px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07)}.wd-stat small,.wd-stat span{display:block;color:var(--muted,#95a0b6)}.wd-stat strong{display:block;font-size:20px;margin:5px 0}
+  .wd-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(350px,.85fr);gap:18px;align-items:start}.wd-card{padding:22px;border-radius:23px;background:rgba(13,18,31,.86);border:1px solid rgba(255,255,255,.08);box-shadow:0 12px 36px rgba(0,0,0,.14)}
+  .wd-head{display:flex;align-items:center;gap:12px;margin-bottom:20px}.wd-step{width:39px;height:39px;border-radius:13px;display:grid;place-items:center;background:linear-gradient(135deg,#7c5cfc,#25d9a6);font-weight:900}.wd-head h2{margin:0;font-size:20px}.wd-head p{margin:3px 0 0;color:var(--muted,#95a0b6);font-size:12px}
+  .wd-field{margin-bottom:16px}.wd-field>label,.wd-label{display:flex;justify-content:space-between;gap:10px;margin-bottom:8px;font-size:13px;font-weight:850}.wd-label span:last-child,.wd-field>label span:last-child{color:var(--muted,#95a0b6);font-weight:600}.wd-field .hbl-input,.wd-field select{width:100%;min-height:49px;border-radius:14px}.wd-help{display:block;margin-top:7px;color:var(--muted,#95a0b6);font-size:12px;line-height:1.45}.errorlist{list-style:none;margin:7px 0 0;padding:0;color:#ff7f8f;font-size:12px}
+  .net-picker{display:grid;grid-template-columns:1fr 1fr;gap:10px}.net-option{position:relative}.net-option input{position:absolute;opacity:0;pointer-events:none}.net-option label{display:block;height:100%;padding:16px;border-radius:17px;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.025);cursor:pointer;transition:.18s ease}.net-option label:hover{border-color:rgba(37,217,166,.38);transform:translateY(-1px)}.net-option input:checked+label{border-color:#25d9a6;background:rgba(37,217,166,.08);box-shadow:0 0 0 1px rgba(37,217,166,.12) inset}.net-icon{width:39px;height:39px;border-radius:12px;display:grid;place-items:center;background:rgba(255,255,255,.07);font-weight:900;margin-bottom:10px}.net-option strong{display:block;font-size:15px}.net-option small{display:block;color:var(--muted,#95a0b6);line-height:1.4;margin-top:4px}.net-check{position:absolute;right:13px;top:13px;opacity:0;color:#25d9a6;font-weight:900}.net-option input:checked+label .net-check{opacity:1}
+  .network-info{padding:12px 14px;border-radius:14px;margin:9px 0 0;background:rgba(37,217,166,.07);border:1px solid rgba(37,217,166,.18);font-size:12px;line-height:1.45}.network-info strong{color:#25d9a6}
+  .confirm-box{display:flex;align-items:flex-start;gap:10px;padding:13px 14px;border-radius:14px;background:rgba(255,182,72,.07);border:1px solid rgba(255,182,72,.18);font-size:12px;line-height:1.45}.confirm-box input{margin-top:2px}.confirm-box b{color:#ffcc75}
+  .saved-list{display:grid;gap:9px;margin:14px 0 18px}.saved-wallet{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 13px;border-radius:14px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.065)}.saved-wallet b{display:block;font-size:13px}.saved-wallet small{color:var(--muted,#95a0b6)}.saved-network{padding:5px 8px;border-radius:999px;background:rgba(124,92,252,.13);font-size:11px;font-weight:900}
+  .amount-wrap{position:relative}.amount-wrap input{padding-right:68px!important;font-size:18px!important;font-weight:900}.amount-wrap span{position:absolute;right:15px;top:50%;transform:translateY(-50%);font-size:12px;font-weight:900;color:#25d9a6}
+  .wd-summary{padding:15px;border-radius:17px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07);margin-top:15px}.wd-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;font-size:13px}.wd-row span{color:var(--muted,#95a0b6)}.wd-row.total{border-top:1px solid rgba(255,255,255,.08);margin-top:5px;padding-top:13px}.wd-row.total b{color:#25d9a6;font-size:17px}.wd-note{display:block;margin-top:7px;color:var(--muted,#95a0b6);font-size:12px;line-height:1.45}.wd-btn{width:100%;min-height:50px;margin-top:15px;font-weight:900}
+  .history{margin-top:18px}.network-pill{display:inline-flex;padding:5px 8px;border-radius:999px;background:rgba(124,92,252,.13);font-size:11px;font-weight:900}.pay-value{font-weight:900;color:#25d9a6}.empty-wallet{padding:14px;border-radius:14px;border:1px dashed rgba(255,255,255,.13);color:var(--muted,#95a0b6);font-size:12px;text-align:center;margin-top:8px}
+  @media(max-width:900px){.wd-grid{grid-template-columns:1fr}.wd-stats{grid-template-columns:1fr 1fr}.wd-stat:first-child{grid-column:1/-1}}
+  @media(max-width:620px){.wd-hero{padding:21px 18px;border-radius:20px}.wd-stats{grid-template-columns:1fr}.wd-stat:first-child{grid-column:auto}.net-picker{grid-template-columns:1fr}.wd-card{padding:18px}.history th:nth-child(3),.history td:nth-child(3),.history th:nth-child(4),.history td:nth-child(4){display:none}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="wd-page">
+  <section class="wd-hero">
+    <span class="eyebrow">HBL · RETIROS USDT</span>
+    <h1>Retira por TRC20 o BEP20.</h1>
+    <p>Al guardar una wallet ahora debes <b>elegir primero la red</b>. HBL guardará la dirección junto con esa red para que siempre sepas si tu destino es TRC20 o BEP20.</p>
+    <div class="wd-badges"><span class="wd-badge">USDT únicamente</span><span class="wd-badge">TRON · TRC20</span><span class="wd-badge">BNB Smart Chain · BEP20</span><span class="wd-badge">Cargo fijo 1 USDT</span></div>
+  </section>
+
+  <section class="wd-stats">
+    <article class="wd-stat"><small>Saldo disponible</small><strong>{% if preferred_balance != None %}{{ preferred_balance }} {{ preferred_currency }}{% else %}— {{ preferred_currency }}{% endif %}</strong><span>{{ config.base_currency_symbol }} {{ request.user.saldo }} {{ config.base_currency_code }}</span></article>
+    <article class="wd-stat"><small>Retiro mínimo</small><strong>{% if withdrawal_min_preferred %}{{ withdrawal_min_preferred }} {{ preferred_currency }}{% else %}{{ config.base_currency_symbol }} {{ config.withdrawal_min }}{% endif %}</strong><span>Se valida antes de confirmar</span></article>
+    <article class="wd-stat"><small>Cargo por retiro</small><strong>1 USDT</strong><span>Se suma al monto que deseas recibir</span></article>
+  </section>
+
+  {% if not withdraw_currency_ready %}<div class="currency-alert"><b>Retiros temporalmente no disponibles.</b> Falta la tasa para {{ preferred_currency }}.</div>{% endif %}
+
+  <div class="wd-grid">
+    <section class="wd-card">
+      <div class="wd-head"><div class="wd-step">1</div><div><h2>Solicitar retiro</h2><p>Elige una wallet ya guardada y el monto neto.</p></div></div>
+
+      <form method="post" id="withdraw-form" novalidate>
+        {% csrf_token %}<input type="hidden" name="action" value="withdraw">
+        {{ form.non_field_errors }}
+        <div class="wd-field">
+          <label for="{{ form.payout_account.id_for_label }}"><span>Wallet de destino</span><span>La red aparece en el nombre</span></label>
+          {{ form.payout_account }}{{ form.payout_account.errors }}
+          {% if not saved_wallets %}<div class="empty-wallet">Aún no tienes wallets. Agrega una TRC20 o BEP20 en el panel de la derecha.</div>{% endif %}
+        </div>
+
+        <div hidden aria-hidden="true">{{ form.amount }}</div>
+        <div class="wd-field">
+          <label for="desired-withdraw-amount"><span>USDT que quieres recibir</span><span>Neto</span></label>
+          <div class="amount-wrap"><input id="desired-withdraw-amount" class="hbl-input" type="number" min="0.00000001" step="0.00000001" inputmode="decimal" placeholder="10.00"><span>USDT</span></div>
+          <small class="wd-help">Ejemplo: para recibir 10 USDT, HBL calcula el equivalente de 11 USDT: 10 para ti + 1 de cargo.</small>{{ form.amount.errors }}
+        </div>
+
+        <div class="wd-summary" aria-live="polite">
+          <div class="wd-row"><span>Recibirás</span><b id="sum-receive">— USDT</b></div>
+          <div class="wd-row"><span>Red de destino</span><b id="sum-network">—</b></div>
+          <div class="wd-row"><span>Cargo HBL</span><b>1 USDT</b></div>
+          <div class="wd-row total"><span>Total a descontar</span><b id="sum-total">— {{ preferred_currency }}</b></div>
+          <small class="wd-note" id="sum-note">Selecciona una wallet y escribe el monto.</small>
+        </div>
+        <button class="primary-btn wd-btn" type="submit" {% if not withdraw_currency_ready %}disabled{% endif %}>Confirmar retiro USDT</button>
+      </form>
+    </section>
+
+    <aside class="wd-card">
+      <div class="wd-head"><div class="wd-step">2</div><div><h2>Agregar wallet</h2><p>Primero indica qué red estás guardando.</p></div></div>
+
+      {% if saved_wallets %}
+      <span class="eyebrow">TUS WALLETS</span>
+      <div class="saved-list">
+        {% for wallet in saved_wallets %}
+        <div class="saved-wallet"><div><b>{{ wallet.label }}</b><small>{{ wallet.masked_identifier }}</small></div><span class="saved-network">{% if wallet.withdrawal_method.slug == 'usdt-trc20' %}TRC20{% else %}BEP20{% endif %}</span></div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <form method="post" id="wallet-form" novalidate>
+        {% csrf_token %}<input type="hidden" name="action" value="add_account">
+        {{ account_form.non_field_errors }}
+
+        <div class="wd-field">
+          <div class="wd-label"><span>1. Selecciona la red</span><span>Obligatorio</span></div>
+          <div class="net-picker">
+            <div class="net-option">
+              <input type="radio" name="network" value="usdt-trc20" id="network-trc20" {% if account_form.network.value == 'usdt-trc20' %}checked{% endif %}>
+              <label for="network-trc20"><span class="net-check">✓</span><div class="net-icon">TRX</div><strong>USDT · TRC20</strong><small>Red TRON. La dirección debe comenzar con <b>T</b>.</small></label>
+            </div>
+            <div class="net-option">
+              <input type="radio" name="network" value="usdt-bep20" id="network-bep20" {% if account_form.network.value == 'usdt-bep20' %}checked{% endif %}>
+              <label for="network-bep20"><span class="net-check">✓</span><div class="net-icon">BNB</div><strong>USDT · BEP20</strong><small>BNB Smart Chain. La dirección comienza con <b>0x</b>.</small></label>
+            </div>
+          </div>
+          {{ account_form.network.errors }}
+        </div>
+
+        <div class="wd-field">
+          <label for="{{ account_form.identifier.id_for_label }}"><span>2. Pega la dirección USDT</span><span id="address-network-label">Selecciona la red</span></label>
+          {{ account_form.identifier }}{{ account_form.identifier.errors }}
+          <div class="network-info" id="network-info"><strong>Selecciona TRC20 o BEP20.</strong> Después pega la dirección correspondiente a esa misma red.</div>
+        </div>
+
+        <div class="wd-field">
+          <label for="{{ account_form.label.id_for_label }}"><span>3. Nombre para reconocerla</span><span>Opcional</span></label>
+          {{ account_form.label }}{{ account_form.label.errors }}
+        </div>
+
+        <div class="confirm-box">
+          {{ account_form.confirm_network }}
+          <label for="{{ account_form.confirm_network.id_for_label }}"><b id="confirm-title">Confirmación de red.</b> <span id="confirm-text">Confirmo que revisé en mi wallet que esta dirección pertenece a la red que seleccioné.</span></label>
+        </div>
+        {{ account_form.confirm_network.errors }}
+
+        <label style="display:flex;gap:9px;align-items:center;margin:13px 0;font-size:13px">{{ account_form.is_default }} <span>{{ account_form.is_default.label }}</span></label>{{ account_form.is_default.errors }}
+
+        <div class="network-info"><strong>Importante para BEP20:</strong> una dirección 0x también puede existir en otras redes. HBL no puede comprobar la blockchain de origen solo por el texto de la dirección; debes verificar que en tu wallet diga <b>BNB Smart Chain (BEP20)</b>.</div>
+        <button class="secondary-btn wd-btn" type="submit">Guardar wallet con su red</button>
+      </form>
+    </aside>
+  </div>
+
+  <section class="wd-card history">
+    <div class="wd-head"><div class="wd-step">3</div><div><h2>Historial de retiros</h2><p>Cada operación conserva la red utilizada.</p></div></div>
+    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Red</th><th>Total</th><th>Cargo</th><th>Recibes</th><th>Estado</th></tr></thead><tbody>
+      {% for item in withdrawals %}<tr><td>{{ item.created_at|date:'d/m/Y H:i' }}</td><td><span class="network-pill">{{ item.payout_network|default:item.payout_label }}</span></td><td>{{ item.requested_amount|floatformat:2 }} {{ item.requested_currency }}</td><td>{{ item.base_currency }} {{ item.fee|floatformat:2 }}</td><td class="pay-value">{{ item.payout_amount|floatformat:8 }} {{ item.payout_currency }}</td><td><span class="status {{ item.status }}">{{ item.get_status_display }}</span></td></tr>{% empty %}<tr><td colspan="6">Aún no tienes retiros.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+</div>
+
+{{ withdrawal_accounts_data|json_script:"withdrawal-accounts-json" }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const networkRadios = [...document.querySelectorAll('input[name="network"]')];
+  const address = document.getElementById('id_identifier');
+  const addressLabel = document.getElementById('address-network-label');
+  const networkInfo = document.getElementById('network-info');
+  const confirmTitle = document.getElementById('confirm-title');
+  const confirmText = document.getElementById('confirm-text');
+
+  const chosenNetwork = () => networkRadios.find(r => r.checked)?.value || '';
+  const updateWalletUI = () => {
+    const network = chosenNetwork();
+    if (!address) return;
+    if (network === 'usdt-trc20') {
+      address.placeholder = 'T... dirección USDT TRC20';
+      if (addressLabel) addressLabel.textContent = 'TRC20 · TRON';
+      if (networkInfo) networkInfo.innerHTML = '<strong>Estás guardando TRC20.</strong> Pega una dirección TRON válida que comience con T.';
+      if (confirmTitle) confirmTitle.textContent = 'Confirmo TRC20.';
+      if (confirmText) confirmText.textContent = ' Verifiqué que esta dirección recibe USDT por la red TRON (TRC20).';
+    } else if (network === 'usdt-bep20') {
+      address.placeholder = '0x... dirección USDT BEP20';
+      if (addressLabel) addressLabel.textContent = 'BEP20 · BNB Smart Chain';
+      if (networkInfo) networkInfo.innerHTML = '<strong>Estás guardando BEP20.</strong> Pega una dirección de BNB Smart Chain que comience con 0x.';
+      if (confirmTitle) confirmTitle.textContent = 'Confirmo BEP20.';
+      if (confirmText) confirmText.textContent = ' Verifiqué que esta dirección recibe USDT por BNB Smart Chain (BEP20), no ERC20 ni otra red.';
+    } else {
+      address.placeholder = 'Primero selecciona TRC20 o BEP20';
+      if (addressLabel) addressLabel.textContent = 'Selecciona la red';
+      if (networkInfo) networkInfo.innerHTML = '<strong>Selecciona TRC20 o BEP20.</strong> Después pega la dirección correspondiente a esa misma red.';
+    }
+  };
+  networkRadios.forEach(r => r.addEventListener('change', updateWalletUI));
+  updateWalletUI();
+
+  const form = document.getElementById('withdraw-form');
+  const accountSelect = document.getElementById('id_payout_account');
+  const serverAmount = document.getElementById('id_amount');
+  const desired = document.getElementById('desired-withdraw-amount');
+  const accountsNode = document.getElementById('withdrawal-accounts-json');
+  const accounts = accountsNode ? JSON.parse(accountsNode.textContent || '[]') : [];
+  const preferredRate = Number('{{ preferred_rate|default:0 }}'.replace(',', '.'));
+  const preferredCurrency = '{{ preferred_currency|escapejs }}';
+  const baseCurrency = '{{ config.base_currency_code|escapejs }}';
+  const fmt = (n,max=8) => Number.isFinite(n) ? new Intl.NumberFormat(undefined,{minimumFractionDigits:2,maximumFractionDigits:max}).format(n) : '—';
+  const selected = () => accounts.find(x => String(x.id) === String(accountSelect?.value || ''));
+
+  const preview = () => {
+    const account = selected();
+    const amount = Number((desired?.value || '').replace(',', '.'));
+    const receive = document.getElementById('sum-receive');
+    const network = document.getElementById('sum-network');
+    const total = document.getElementById('sum-total');
+    const note = document.getElementById('sum-note');
+    if (!account || !Number.isFinite(amount) || amount <= 0 || !preferredRate) {
+      if (serverAmount) serverAmount.value = '';
+      if (receive) receive.textContent = '— USDT';
+      if (network) network.textContent = account?.network || '—';
+      if (total) total.textContent = `— ${preferredCurrency}`;
+      if (note) note.textContent = 'Selecciona una wallet y escribe el monto.';
+      return;
+    }
+    const payoutRate = Number(account.payout_rate || 0);
+    if (!payoutRate) return;
+    const feeFixedBase = Math.max(0, Number(account.fee_fixed_base || 0));
+    const feePct = Math.max(0, Math.min(99.99, Number(account.fee_percent || 0))) / 100;
+    const desiredBase = amount * payoutRate;
+    const totalBase = (desiredBase + feeFixedBase) / (1 - feePct);
+    const totalLocal = totalBase / preferredRate;
+    const totalUsdt = totalBase / payoutRate;
+    if (serverAmount) serverAmount.value = totalLocal.toFixed(2);
+    if (receive) receive.textContent = `${fmt(amount)} USDT`;
+    if (network) network.textContent = account.network || account.method;
+    if (total) total.textContent = `${fmt(totalLocal,2)} ${preferredCurrency}`;
+    let text = `Total equivalente: ${fmt(totalUsdt)} USDT (${fmt(totalBase,2)} ${baseCurrency} contables).`;
+    const minBase = Number(account.effective_min_base || 0);
+    const maxBase = Number(account.max_base || 0);
+    if (totalBase < minBase) text = `El total está por debajo del mínimo permitido, equivalente a ${fmt(minBase/payoutRate)} USDT.`;
+    else if (maxBase > 0 && totalBase > maxBase) text = 'El total supera el máximo permitido para esta red.';
+    if (note) note.textContent = text;
+  };
+
+  accountSelect?.addEventListener('change', preview);
+  desired?.addEventListener('input', preview);
+  form?.addEventListener('submit', e => {
+    preview();
+    if (!serverAmount?.value || !accountSelect?.value || !desired?.value) {
+      e.preventDefault();
+      const note = document.getElementById('sum-note');
+      if (note) note.textContent = 'Selecciona una wallet válida y escribe el monto.';
+    }
+  });
+  preview();
+})();
+</script>
+{% endblock %}
