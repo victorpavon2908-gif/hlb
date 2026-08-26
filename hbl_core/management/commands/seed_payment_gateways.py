@@ -1,14 +1,13 @@
 from decimal import Decimal
 
 from django.conf import settings
-
 from django.core.management.base import BaseCommand
 
 from hbl_core.models import CurrencyRate, PaymentMethod, PlatformConfig
 
 
 class Command(BaseCommand):
-    help = "Deja HBL únicamente con depósitos USDT por TRC20 y BEP20."
+    help = "Prepara los métodos base NOWPayments sin borrar el catálogo multimoneda dinámico."
 
     def _usdt_rate(self, config):
         row = CurrencyRate.objects.filter(code="USDT", active=True).first()
@@ -25,61 +24,49 @@ class Command(BaseCommand):
         )
         rate = self._usdt_rate(config)
         nowpayments_ready = bool(settings.NOWPAYMENTS_API_KEY and settings.NOWPAYMENTS_IPN_SECRET)
-        keep_ids = []
 
         specs = [
             {
                 "kind": PaymentMethod.Kind.USDT_TRC20,
-                "label": "USDT por TRC20",
+                "provider_code": "usdttrc20",
+                "label": "Tether · TRON (TRC20)",
                 "network_label": "TRON (TRC20)",
                 "sort_order": 10,
             },
             {
                 "kind": PaymentMethod.Kind.USDT_BEP20,
-                "label": "USDT por BEP20",
+                "provider_code": "usdtbsc",
+                "label": "Tether · BNB Smart Chain (BEP20)",
                 "network_label": "BNB Smart Chain (BEP20)",
                 "sort_order": 20,
             },
         ]
 
         for spec in specs:
-            method, _ = PaymentMethod.objects.update_or_create(
-                kind=spec["kind"],
-                label=spec["label"],
-                defaults={
-                    "currency": "USDT",
-                    "network": spec["network_label"],
-                    "destination": "",
-                    "instructions": (
-                        f"Envía únicamente USDT por {spec['network_label']}. "
-                        "HBL sumará 1 USDT al monto que deseas acreditar y NOWPayments "
-                        "generará la dirección exacta para la orden."
-                    ),
-                    "min_amount": min_usdt,
-                    "max_amount": Decimal("0"),
-                    "require_proof": False,
-                    "require_txid": False,
-                    "balance_rate": rate,
-                    "sender_network_fee_estimate": Decimal("0"),
-                    "active": nowpayments_ready,
-                    "sort_order": spec["sort_order"],
-                },
+            method = PaymentMethod.objects.filter(kind=spec["kind"]).order_by("id").first()
+            if not method:
+                method = PaymentMethod(kind=spec["kind"])
+            method.label = spec["label"]
+            method.currency = "USDT"
+            method.network = spec["network_label"]
+            method.destination = spec["provider_code"]
+            method.instructions = (
+                f"Paga con USDT por {spec['network_label']}. "
+                "HBL suma 1 USDT al monto que deseas acreditar y NOWPayments genera la orden."
             )
-            keep_ids.append(method.pk)
-            if nowpayments_ready:
-                self.stdout.write(self.style.SUCCESS(
-                    f"{spec['label']} activo mediante NOWPayments."
-                ))
-            else:
-                self.stdout.write(self.style.WARNING(
-                    f"{spec['label']} desactivado: faltan NOWPAYMENTS_API_KEY o NOWPAYMENTS_IPN_SECRET."
-                ))
+            method.min_amount = min_usdt
+            method.max_amount = Decimal("0")
+            method.require_proof = False
+            method.require_txid = False
+            method.balance_rate = rate
+            method.sender_network_fee_estimate = Decimal("0")
+            method.active = nowpayments_ready
+            method.sort_order = spec["sort_order"]
+            method.save()
 
-        obsolete = PaymentMethod.objects.exclude(pk__in=keep_ids)
-        deactivated = obsolete.update(active=False)
-        deleted, _ = PaymentMethod.objects.exclude(pk__in=keep_ids).filter(deposits__isnull=True).delete()
-
+        # Importante: NO desactivar ni borrar crypto_other. Esas filas son el
+        # catálogo dinámico obtenido de /merchant/coins o /currencies y se
+        # actualizan al abrir la billetera cada 10 minutos.
         self.stdout.write(self.style.SUCCESS(
-            "Configuración terminada: visibles únicamente USDT TRC20 y USDT BEP20; "
-            f"métodos antiguos desactivados={deactivated}, eliminados sin historial={deleted}."
+            "Métodos base NOWPayments listos. El catálogo completo de criptomonedas se sincroniza dinámicamente en la billetera."
         ))
