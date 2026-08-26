@@ -1,11 +1,20 @@
-# HBL · Depósitos NOWPayments
+# HBL · Depósitos y retiros USDT
 
 HBL acepta únicamente USDT por estas dos redes:
 
 - TRON / TRC20 (`usdttrc20` en NOWPayments).
 - BNB Smart Chain / BEP20 (`usdtbsc` en NOWPayments).
 
-Los depósitos se validan automáticamente con la API y los avisos IPN de NOWPayments. Los retiros no usan Mass Payouts: permanecen pendientes para revisión y pago manual por administración.
+Los depósitos se validan automáticamente con la API y los avisos IPN de NOWPayments. Los retiros permanecen pendientes para pago administrativo por la red detectada.
+
+## Regla fija de 1 USDT
+
+HBL aplica una regla sencilla y visible en ambas direcciones:
+
+- **Depósito:** el usuario escribe cuánto desea acreditar. HBL genera la orden por ese monto **+ 1 USDT**. Si desea acreditar 10 USDT, paga 11 USDT y recibe 10 USDT de saldo equivalente.
+- **Retiro:** el usuario escribe cuánto desea recibir. HBL suma el equivalente de **1 USDT** al total reservado/descontado. Si desea recibir 10 USDT y su saldo está expresado en USDT, se descuentan 11 USDT y se pagan 10 USDT.
+
+La tarifa propia de la billetera o exchange desde donde se envía una transacción es externa a HBL. El usuario debe asegurarse de que la dirección de pago reciba el monto exacto indicado por HBL.
 
 ## Configuración en NOWPayments
 
@@ -25,37 +34,35 @@ NOWPAYMENTS_IPN_SECRET=tu_secreto_ipn
 NOWPAYMENTS_API_BASE_URL=https://api.nowpayments.io/v1
 NOWPAYMENTS_IPN_CALLBACK_URL=https://hbl-e8cw.onrender.com/api/pagos/nowpayments/ipn/
 NOWPAYMENTS_TIMEOUT_SECONDS=15
-NOWPAYMENTS_FEE_PAID_BY_USER=True
+NOWPAYMENTS_FEE_PAID_BY_USER=False
 ```
 
 No guardes estos secretos en Git ni en los campos del panel HBL.
 
+`NOWPAYMENTS_FEE_PAID_BY_USER=False` evita que HBL solicite a NOWPayments agregar otra comisión de servicio sobre el precio de la orden. El cargo comercial de HBL ya está incorporado explícitamente en el precio como +1 USDT.
+
 ## Prueba temporal con monto pequeño
 
-Para permitir temporalmente órdenes desde 1 USDT agrega en Render:
+Para permitir temporalmente acreditaciones desde 1 USDT agrega en Render:
 
 ```env
 NOWPAYMENTS_TEST_MODE=True
 NOWPAYMENTS_TEST_MIN_USDT=1
 ```
 
-NOWPayments conserva su propio mínimo dinámico según la red y las comisiones. Al finalizar la prueba cambia `NOWPAYMENTS_TEST_MODE=False` y vuelve a desplegar; HBL restaurará el mínimo normal configurado.
+Con esa configuración, una prueba que acredita 1 USDT genera una orden por 2 USDT. Al finalizar la prueba cambia `NOWPAYMENTS_TEST_MODE=False` y vuelve a desplegar; HBL restaurará el mínimo normal configurado.
 
 ## Flujo de depósito
 
-1. El usuario elige TRC20 o BEP20 e ingresa el monto.
-2. HBL crea una orden mediante `POST /v1/payment`.
+1. El usuario elige TRC20 o BEP20 e ingresa el monto que desea acreditar.
+2. HBL suma 1 USDT y crea la orden mediante `POST /v1/payment`.
 3. NOWPayments devuelve la dirección y el monto exactos.
 4. HBL recibe los cambios por IPN y vuelve a consultar `GET /v1/payment/{payment_id}` como comprobación independiente.
-5. El saldo se acredita únicamente cuando el proveedor responde `finished` y coinciden el ID de orden, la red, la moneda y el monto solicitado.
+5. El saldo se acredita únicamente cuando el proveedor responde `finished` y coinciden el ID de orden, la red, la moneda y el precio esperado.
 
-`waiting`, `confirming`, `confirmed` y `sending` permanecen procesando. `partially_paid` o cualquier inconsistencia pasan a revisión manual. `failed`, `refunded` y `expired` no acreditan saldo.
+`waiting`, `confirming`, `confirmed` y `sending` permanecen procesando. Un `partially_paid` permanece activo: HBL muestra cuánto se recibió y cuánto falta, y seguirá verificando hasta que el proveedor confirme el pago completo. `failed`, `refunded` y `expired` no acreditan saldo.
 
-El panel de recargas muestra el campo `actually_paid` como **Recibido** y permite volver a consultarlo con **Actualizar proveedor** antes de aprobar o rechazar manualmente.
-
-Con `NOWPAYMENTS_FEE_PAID_BY_USER=True`, HBL envía `is_fee_paid_by_user: true`. El usuario escribe el saldo que desea acreditar y NOWPayments agrega dinámicamente sus comisiones al total a enviar. La tarifa de la billetera desde la que el usuario transfiere es externa y debe pagarse aparte para que la dirección reciba el monto exacto.
-
-Cada red de depósito tiene `sender_network_fee_estimate`, editable en **Control → Métodos de recarga**. HBL la suma únicamente para mostrar el **saldo mínimo recomendado en la billetera**; no la añade al monto que recibe la dirección ni al saldo acreditado. El usuario puede reemplazarla en pantalla por la tarifa exacta que muestre Binance o su billetera.
+Las inconsistencias reales de ID, orden, red, moneda o monto quedan disponibles para revisión administrativa, pero los textos técnicos no se exponen al usuario final.
 
 La firma IPN se valida con `x-nowpayments-sig`, HMAC-SHA512 y el secreto IPN. La acreditación es atómica e idempotente para impedir dobles créditos.
 
@@ -67,14 +74,16 @@ Además del IPN y de la consulta periódica en la billetera, administración pue
 python manage.py sync_crypto_deposits --limit 100
 ```
 
-Para volver a consultar también los pagos parciales enviados a revisión:
+Para volver a consultar también registros pendientes por una inconsistencia real:
 
 ```bash
 python manage.py sync_crypto_deposits --include-pending --limit 100
 ```
 
-## Revisión manual y retiros
+Las órdenes antiguas creadas antes de activar la regla +1 USDT conservan su precio original y pueden terminar normalmente; la compatibilidad se mantiene para no bloquear depósitos que ya estaban abiertos.
 
-Los depósitos pendientes pueden aprobarse o rechazarse desde `/control/recargas/`. Esa opción es un respaldo operativo y debe usarse solo tras comprobar el pago en NOWPayments.
+## Retiros
 
-Los retiros aceptan únicamente direcciones USDT TRC20 (`T...`) o BEP20 (`0x...`). HBL detecta la red por la dirección, reserva el saldo y deja la solicitud pendiente; administración realiza el pago y registra la referencia manualmente.
+Los retiros aceptan únicamente direcciones USDT TRC20 (`T...`) o BEP20 (`0x...`). HBL detecta la red por la dirección y muestra al usuario el monto neto a recibir, el cargo fijo de 1 USDT y el total a descontar antes de confirmar.
+
+En cada despliegue, `seed_hbl` mantiene las dos redes de retiro activas con comisión porcentual 0 y comisión fija equivalente a 1 USDT en la moneda base vigente. Administración realiza el pago del monto neto y registra la referencia correspondiente.
