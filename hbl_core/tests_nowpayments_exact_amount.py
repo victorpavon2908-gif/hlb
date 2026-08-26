@@ -78,7 +78,7 @@ class NowPaymentsExactAmountTests(SimpleTestCase):
 
         with self.assertRaisesMessage(
             NowPaymentsError,
-            "NOWPayments no respetó el total exacto solicitado",
+            "NOWPayments no respetó el total exacto en USDT",
         ):
             create_payment_for_deposit(
                 self._deposit(),
