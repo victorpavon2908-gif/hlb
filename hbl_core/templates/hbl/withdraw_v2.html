@@ -28,7 +28,7 @@
   <section class="wd-hero">
     <span class="eyebrow">HBL · RETIROS USDT</span>
     <h1>Retira por TRC20 o BEP20.</h1>
-    <p>Al guardar una wallet ahora debes <b>elegir primero la red</b>. HBL guardará la dirección junto con esa red para que siempre sepas si tu destino es TRC20 o BEP20.</p>
+    <p>Al guardar una wallet debes <b>elegir primero la red</b>. HBL guardará la dirección junto con esa red para que siempre sepas si tu destino es TRC20 o BEP20.</p>
     <div class="wd-badges"><span class="wd-badge">USDT únicamente</span><span class="wd-badge">TRON · TRC20</span><span class="wd-badge">BNB Smart Chain · BEP20</span><span class="wd-badge">Cargo fijo 1 USDT</span></div>
   </section>
 
@@ -72,7 +72,7 @@
     </section>
 
     <aside class="wd-card">
-      <div class="wd-head"><div class="wd-step">2</div><div><h2>Agregar wallet</h2><p>Primero indica qué red estás guardando.</p></div></div>
+      <div class="wd-head"><div class="wd-step">2</div><div><h2>Agregar wallet TRC20 / BEP20</h2><p>Elige la red antes de pegar la dirección.</p></div></div>
 
       {% if saved_wallets %}
       <span class="eyebrow">TUS WALLETS</span>
@@ -227,7 +227,7 @@
     if (!serverAmount?.value || !accountSelect?.value || !desired?.value) {
       e.preventDefault();
       const note = document.getElementById('sum-note');
-      if (note) note.textContent = 'Selecciona una wallet válida y escribe el monto.';
+      if (note) note.textContent = 'Selecciona una wallet válida y escribe los USDT que deseas recibir.';
     }
   });
   preview();
