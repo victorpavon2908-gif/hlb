@@ -5,3 +5,4 @@ python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 python manage.py seed_hbl
 python manage.py seed_payment_gateways
+python manage.py sync_nowpayments_catalog
