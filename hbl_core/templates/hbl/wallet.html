@@ -1,7 +1,10 @@
 {% extends 'hbl/base.html' %}
 {% load static %}
 {% block title %}Billetera · HBL{% endblock %}
-{% block head %}<link rel="stylesheet" href="{% static 'hbl/css/wallet_crypto.css' %}">{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{% static 'hbl/css/wallet_crypto.css' %}">
+<link rel="stylesheet" href="{% static 'hbl/css/crypto_logos.css' %}">
+{% endblock %}
 {% block content %}
 <div data-wallet-root data-recheck-url="{% url 'hbl_crypto_recheck' %}">
 <section class="page-title compact-title wallet-hero-title">
@@ -13,7 +16,7 @@
 {% if active_payment %}
 <section class="panel glass-card space-bottom active-order-card">
   <div class="panel-heading active-order-heading">
-    <div class="panel-icon crypto-coin-icon" data-symbol="{{ active_payment.payment_method.currency }}">{{ active_payment.ui_icon|default:'◈' }}</div>
+    {% include 'hbl/_crypto_logo.html' with symbol=active_payment.payment_method.ui_symbol %}
     <div><span class="eyebrow">ORDEN ACTIVA</span><h2>Completa tu depósito</h2></div>
     <span class="order-live-badge">EN ESPERA</span>
   </div>
@@ -92,8 +95,11 @@
         <div class="crypto-picker" data-crypto-picker>
           {{ form.payment_method }}
           <button class="crypto-picker-trigger" type="button" data-crypto-trigger aria-haspopup="listbox" aria-expanded="false">
-            <span class="crypto-coin-icon" data-selected-icon data-symbol="">◈</span>
-            <span class="crypto-picker-trigger__meta"><b data-selected-title>Selecciona una criptomoneda</b><small data-selected-subtitle>Mostramos pocas opciones primero; puedes buscar cualquier moneda.</small></span>
+            <span class="crypto-logo crypto-logo--placeholder" data-selected-logo>
+              <span class="crypto-logo__fallback" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9 9.3h4.1a2 2 0 0 1 0 4H9m0-4v8m0-4h4.7a2 2 0 0 1 0 4H9M11 7v2.3m0 8.1V20"/></svg></span>
+              <img alt="" data-selected-logo-img>
+            </span>
+            <span class="crypto-picker-trigger__meta"><b data-selected-title>Selecciona una criptomoneda</b><small data-selected-subtitle>Primero mostramos las opciones principales; puedes buscar cualquier otra.</small></span>
             <span class="crypto-picker-chevron">⌄</span>
           </button>
           <div class="crypto-picker-menu">
@@ -104,12 +110,13 @@
             <div class="crypto-picker-list" role="listbox">
               {% for method in methods %}
               <button type="button" class="crypto-picker-option" role="option"
-                data-crypto-option data-value="{{ method.id }}" data-icon="{{ method.ui_icon }}" data-symbol="{{ method.currency }}" data-rank="{{ forloop.counter }}"
-                data-title="{{ method.label }}" data-subtitle="{{ method.currency }} · {{ method.ui_network }}"
-                data-search="{{ method.label|lower }} {{ method.currency|lower }} {{ method.ui_network|lower }} {{ method.ui_provider_code|lower }}">
-                <span class="crypto-coin-icon" data-symbol="{{ method.currency }}">{{ method.ui_icon }}</span>
-                <span class="crypto-picker-option__meta"><b>{{ method.currency }}</b><small>{{ method.label }} · {{ method.ui_network }}</small></span>
-                {% if forloop.counter <= 6 %}<span class="quick-choice-badge">Rápida</span>{% endif %}
+                data-crypto-option data-value="{{ method.id }}" data-symbol="{{ method.ui_symbol }}" data-rank="{{ forloop.counter }}"
+                data-logo="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/{{ method.ui_symbol|lower }}.png"
+                data-title="{{ method.label }}" data-subtitle="{{ method.ui_symbol }} · {{ method.ui_network }}"
+                data-search="{{ method.label|lower }} {{ method.ui_symbol|lower }} {{ method.ui_network|lower }} {{ method.ui_provider_code|lower }}">
+                {% include 'hbl/_crypto_logo.html' with symbol=method.ui_symbol %}
+                <span class="crypto-picker-option__meta"><b>{{ method.ui_symbol }}</b><small>{{ method.label }} · {{ method.ui_network }}</small></span>
+                {% if forloop.counter <= 5 %}<span class="quick-choice-badge">Popular</span>{% endif %}
               </button>
               {% endfor %}
             </div>
@@ -132,14 +139,14 @@
   </section>
 
   <section class="panel glass-card quick-crypto-panel">
-    <div class="section-head compact"><div><span class="eyebrow">SELECCIÓN RÁPIDA</span><h2>Pocas opciones, mejor ordenadas</h2></div></div>
-    <p class="catalog-intro">Estas son las primeras opciones disponibles. Para cualquier otra criptomoneda, usa el buscador del selector.</p>
+    <div class="section-head compact"><div><span class="eyebrow">SELECCIÓN RÁPIDA</span><h2>Las principales primero</h2></div></div>
+    <p class="catalog-intro">Mostramos solo las opciones más conocidas. Las demás siguen disponibles desde el buscador.</p>
     <div class="crypto-mini-grid">
-      {% for method in methods|slice:":6" %}
-      <div class="crypto-mini-card"><span class="crypto-coin-icon" data-symbol="{{ method.currency }}">{{ method.ui_icon }}</span><div><b>{{ method.currency }}</b><small>{{ method.label }} · {{ method.ui_network }}</small></div></div>
+      {% for method in methods|slice:":4" %}
+      <div class="crypto-mini-card" data-symbol="{{ method.ui_symbol }}">{% include 'hbl/_crypto_logo.html' with symbol=method.ui_symbol %}<div><b>{{ method.ui_symbol }}</b><small>{{ method.label }} · {{ method.ui_network }}</small></div></div>
       {% empty %}<div class="form-policy"><b>No hay monedas disponibles.</b> Intenta nuevamente más tarde.</div>{% endfor %}
     </div>
-    {% if methods_count > 6 %}<div class="more-methods-note"><b>+{{ methods_count|add:"-6" }}</b><span>métodos adicionales disponibles desde el buscador</span></div>{% endif %}
+    {% if methods_count > 4 %}<div class="more-methods-note"><b>+{{ methods_count|add:"-4" }}</b><span>métodos adicionales disponibles desde el buscador</span></div>{% endif %}
     <div class="security-note"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/><path d="M9 12l2 2 4-5"/></svg><span><b>Seguridad HBL</b><small>Nunca pedimos frase semilla, clave privada, contraseña ni códigos 2FA.</small></span></div>
   </section>
 </div>
@@ -153,7 +160,7 @@
         {% for dep in deposits %}
         <tr>
           <td>{{ dep.submitted_at|date:'d/m/Y H:i' }}</td>
-          <td><span class="history-method"><span class="crypto-coin-icon small" data-symbol="{{ dep.payment_method.currency }}">{{ dep.ui_icon }}</span><b>{{ dep.payment_method.label }}</b></span></td>
+          <td><span class="history-method">{% include 'hbl/_crypto_logo.html' with symbol=dep.payment_method.ui_symbol small=True %}<b>{{ dep.payment_method.label }}</b></span></td>
           <td>{{ dep.provider_price_amount|default:dep.payment_amount }} USDT</td>
           <td>{% if dep.provider_payment_id %}{{ dep.operation_fee_usdt }} USDT{% else %}—{% endif %}</td>
           <td>{{ dep.payment_amount }} {{ dep.payment_currency }}</td>
