@@ -20,7 +20,7 @@
 
   {% if active_payment.ui_expiration_iso %}
   <div class="order-timer" data-order-timer data-expires="{{ active_payment.ui_expiration_iso }}" data-start="{{ active_payment.submitted_at|date:'c' }}">
-    <div class="order-timer__top"><span>Tiempo restante</span><strong class="order-timer__clock" data-timer-clock>--:--</strong></div>
+    <div class="order-timer__top"><span>Tiempo restante de la orden</span><strong class="order-timer__clock" data-timer-clock>--:--</strong></div>
     <div class="order-timer__bar"><span data-timer-bar></span></div>
     <small data-timer-note>La orden se verificará automáticamente al finalizar el tiempo.</small>
   </div>
@@ -33,6 +33,7 @@
   {% endif %}
 
   <div class="payment-total-card">
+    <span style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">Total exacto a enviar: {{ active_payment.payment_amount }} {{ active_payment.payment_currency }}</span>
     <small>TOTAL EXACTO A ENVIAR</small>
     <strong>{{ active_payment.payment_amount }} <span>{{ active_payment.payment_currency }}</span></strong>
     <p>No reduzcas este monto por la comisión que cobre tu billetera o exchange.</p>
@@ -40,7 +41,7 @@
 
   <div class="payment-detail-grid">
     <div class="payment-detail-pill"><small>Se acreditará</small><b>{{ active_payment.provider_price_amount }} USDT</b></div>
-    <div class="payment-detail-pill"><small>Cargo HBL</small><b>{{ usdt_operation_fee }} USDT</b></div>
+    <div class="payment-detail-pill"><small>Cargo fijo HBL</small><b>{{ usdt_operation_fee }} USDT</b></div>
     <div class="payment-detail-pill"><small>Moneda / red</small><b>{{ active_payment.payment_method.currency }} · {{ active_payment.ui_network }}</b></div>
     <div class="payment-detail-pill"><small>Orden</small><b>#{{ active_payment.provider_payment_id }}</b></div>
   </div>
