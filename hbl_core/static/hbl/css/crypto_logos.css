@@ -1,0 +1,14 @@
+.crypto-logo{position:relative;width:42px;height:42px;flex:0 0 42px;border-radius:50%;display:grid;place-items:center;overflow:hidden;background:linear-gradient(145deg,#18243a,#0f1728);border:1px solid rgba(255,255,255,.11);box-shadow:inset 0 1px rgba(255,255,255,.05),0 8px 18px rgba(0,0,0,.18)}
+.crypto-logo img{position:relative;z-index:2;width:100%;height:100%;object-fit:cover;display:block}
+.crypto-logo__fallback{position:absolute;inset:0;z-index:1;display:grid;place-items:center;background:linear-gradient(145deg,rgba(79,124,255,.16),rgba(124,92,255,.10));color:#dbe7ff}
+.crypto-logo__fallback svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.crypto-logo.is-fallback img{display:none}.crypto-logo.is-fallback .crypto-logo__fallback{z-index:3}
+.crypto-logo--small{width:30px;height:30px;flex-basis:30px}.crypto-logo--small .crypto-logo__fallback svg{width:16px;height:16px}
+.crypto-picker-trigger .crypto-logo{width:42px;height:42px;flex-basis:42px}
+.crypto-picker-option .crypto-logo{width:38px;height:38px;flex-basis:38px}
+.crypto-mini-card .crypto-logo{width:38px;height:38px;flex-basis:38px}
+.crypto-logo--placeholder img{display:none}.crypto-logo--placeholder .crypto-logo__fallback{z-index:3}
+.crypto-picker-option[data-symbol="USDT"] .crypto-logo,.crypto-mini-card[data-symbol="USDT"] .crypto-logo{box-shadow:0 8px 20px rgba(38,161,123,.14)}
+.crypto-picker-option[data-symbol="BTC"] .crypto-logo,.crypto-mini-card[data-symbol="BTC"] .crypto-logo{box-shadow:0 8px 20px rgba(247,147,26,.14)}
+.crypto-picker-option[data-symbol="ETH"] .crypto-logo,.crypto-mini-card[data-symbol="ETH"] .crypto-logo{box-shadow:0 8px 20px rgba(98,126,234,.14)}
+@media(max-width:700px){.crypto-logo{width:38px;height:38px;flex-basis:38px}.crypto-picker-trigger .crypto-logo{width:40px;height:40px;flex-basis:40px}.crypto-picker-option .crypto-logo{width:36px;height:36px;flex-basis:36px}}
