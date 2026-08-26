@@ -38,7 +38,7 @@ class NowPaymentsDepositTests(TestCase):
         self.user = User.objects.create_user(username="now-user", password="Testpass123!")
         self.client.force_login(self.user)
         config = PlatformConfig.get_solo()
-        config.minimum_deposit_usd = Decimal("1.00")
+        config.minimum_deposit_usd = Decimal("10.00")
         config.save(update_fields=["minimum_deposit_usd"])
         CurrencyRate.objects.update_or_create(
             code="USD",
@@ -53,7 +53,7 @@ class NowPaymentsDepositTests(TestCase):
             label="USDT TRC20",
             currency="USDT",
             network="TRON (TRC20)",
-            min_amount=Decimal("1.00"),
+            min_amount=Decimal("10.00"),
             balance_rate=Decimal("36.62"),
             require_txid=False,
             sender_network_fee_estimate=Decimal("0"),
@@ -187,26 +187,29 @@ class NowPaymentsDepositTests(TestCase):
 
     @override_settings(NOWPAYMENTS_TEST_MODE=True, NOWPAYMENTS_TEST_MIN_USDT=Decimal("1"))
     @patch("hbl_core.payment_views.create_payment_for_deposit")
-    def test_test_mode_allows_one_usdt_credit_and_two_usdt_total(self, create_payment):
-        self.trc20.min_amount = Decimal("100.00")
-        self.trc20.save(update_fields=["min_amount"])
-        config = PlatformConfig.get_solo()
-        config.minimum_deposit_usd = Decimal("100.00")
-        config.save(update_fields=["minimum_deposit_usd"])
+    def test_test_mode_still_requires_ten_usdt_and_eleven_total(self, create_payment):
+        response = self.client.post(reverse("hbl_wallet"), {
+            "payment_method": self.trc20.id,
+            "payment_amount": "1.00",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Deposit.objects.exists())
+        self.assertContains(response, "El depósito mínimo global es 10 USDT")
+
         remote = self._remote_created("700099")
-        remote["pay_amount"] = Decimal("2.00000000")
-        remote["price_amount"] = Decimal("2.00000000")
+        remote["pay_amount"] = Decimal("11.00000000")
+        remote["price_amount"] = Decimal("11.00000000")
         remote["fee_amount"] = Decimal("1.00000000")
         create_payment.return_value = remote
 
         response = self.client.post(reverse("hbl_wallet"), {
             "payment_method": self.trc20.id,
-            "payment_amount": "1.00",
+            "payment_amount": "10.00",
         })
         self.assertEqual(response.status_code, 302)
         deposit = Deposit.objects.get(provider_payment_id="700099")
-        self.assertEqual(deposit.provider_price_amount, Decimal("1.00000000"))
-        self.assertEqual(deposit.payment_amount, Decimal("2.00000000"))
+        self.assertEqual(deposit.provider_price_amount, Decimal("10.00000000"))
+        self.assertEqual(deposit.payment_amount, Decimal("11.00000000"))
         self.assertEqual(deposit.provider_fee_amount, Decimal("1.00000000"))
 
     def test_confirmed_does_not_credit_until_finished(self):
@@ -348,3 +351,4 @@ class NowPaymentsDepositTests(TestCase):
         })
         for method in PaymentMethod.objects.filter(active=True):
             self.assertEqual(method.sender_network_fee_estimate, Decimal("0E-8"))
+            self.assertEqual(method.min_amount, Decimal("10.00000000"))
