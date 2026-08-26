@@ -1,46 +1,72 @@
 {% extends 'hbl/base.html' %}
+{% load static %}
 {% block title %}Billetera · HBL{% endblock %}
+{% block head %}<link rel="stylesheet" href="{% static 'hbl/css/wallet_crypto.css' %}">{% endblock %}
 {% block content %}
+<div data-wallet-root data-recheck-url="{% url 'hbl_crypto_recheck' %}">
 <section class="page-title compact-title">
-  <span class="eyebrow">HBL WALLET · RECARGAS</span>
-  <h1>Deposita USDT por TRC20 o BEP20.</h1>
+  <span class="eyebrow">HBL WALLET · NOWPAYMENTS</span>
+  <h1>Paga con la criptomoneda que prefieras.</h1>
   <p>
-    Escribe cuánto deseas acreditar y HBL suma automáticamente <b>1 USDT</b> al total de la orden.
-    Ejemplo: si deseas acreditar <b>10 USDT</b>, la orden se genera por <b>11 USDT</b>.
-    El saldo se acredita únicamente cuando NOWPayments confirma el pago completo.
+    Elige entre las monedas y redes disponibles en NOWPayments. Tú indicas cuánto deseas acreditar en <b>USDT</b> y HBL suma
+    <b>1 USDT</b> de cargo fijo. Si eliges BTC, ETH u otra moneda, NOWPayments calcula el equivalente exacto que debes enviar.
   </p>
 </section>
 
 {% if active_payment %}
 <section class="panel glass-card space-bottom">
   <div class="panel-heading">
-    <div class="panel-icon">₮</div>
+    <div class="panel-icon">{{ active_payment.ui_icon|default:'◈' }}</div>
     <div><span class="eyebrow">ORDEN ACTIVA</span><h2>Completa tu depósito</h2></div>
   </div>
+
+  {% if active_payment.ui_expiration_iso %}
+  <div class="order-timer" data-order-timer data-expires="{{ active_payment.ui_expiration_iso }}" data-start="{{ active_payment.submitted_at|date:'c' }}">
+    <div class="order-timer__top">
+      <span>Tiempo restante de la orden</span>
+      <strong class="order-timer__clock" data-timer-clock>--:--</strong>
+    </div>
+    <div class="order-timer__bar"><span data-timer-bar></span></div>
+    <small data-timer-note>Al llegar a cero HBL consultará automáticamente el estado real con NOWPayments.</small>
+  </div>
+  {% endif %}
 
   {% if active_payment.is_partial_payment %}
   <div class="form-policy space-bottom">
     <b>Pago parcial recibido.</b>
-    Hemos recibido {{ active_payment.provider_actual_paid|default:'0' }} USDT y faltan
-    <strong>{{ active_payment.remaining_payment }} USDT</strong> para completar esta orden.
-    Envía el faltante a la misma dirección y HBL seguirá verificando el pago automáticamente.
+    Hemos recibido {{ active_payment.provider_actual_paid|default:'0' }} {{ active_payment.payment_currency }} y faltan
+    <strong>{{ active_payment.remaining_payment }} {{ active_payment.payment_currency }}</strong> para completar esta orden.
+    Envía el faltante a la misma dirección.
   </div>
   {% endif %}
 
   <div class="method-card rich-method">
-    <div class="method-icon">↓</div>
+    <div class="method-icon">{{ active_payment.ui_icon|default:'↓' }}</div>
     <div>
-      <strong>Total exacto a enviar: {{ active_payment.payment_amount }} USDT</strong>
-      <span>Monto que se acreditará: {{ active_payment.provider_price_amount }} USDT</span>
-      <span>Cargo fijo HBL: {{ usdt_operation_fee }} USDT</span>
-      {% if active_payment.provider_actual_paid %}
-      <span>Recibido hasta ahora: {{ active_payment.provider_actual_paid }} USDT</span>
-      {% endif %}
-      <span>{{ active_payment.payment_method.label }} · Orden #{{ active_payment.provider_payment_id }}</span>
-      <code id="active-payment-address">{{ active_payment.pay_address }}</code>
-      <button class="secondary-btn" type="button" data-copy="#active-payment-address" style="width:max-content;min-height:32px;padding:6px 10px;margin-top:5px">
-        Copiar dirección
-      </button>
+      <strong>Total exacto a enviar: {{ active_payment.payment_amount }} {{ active_payment.payment_currency }}</strong>
+      <div class="payment-detail-grid">
+        <div class="payment-detail-pill"><small>Saldo que se acreditará</small><b>{{ active_payment.provider_price_amount }} USDT</b></div>
+        <div class="payment-detail-pill"><small>Cargo fijo HBL</small><b>{{ usdt_operation_fee }} USDT</b></div>
+        <div class="payment-detail-pill"><small>Criptomoneda / red</small><b>{{ active_payment.payment_method.currency }} · {{ active_payment.ui_network }}</b></div>
+        <div class="payment-detail-pill"><small>Orden NOWPayments</small><b>#{{ active_payment.provider_payment_id }}</b></div>
+      </div>
+
+      {% if active_payment.provider_actual_paid %}<span>Recibido hasta ahora: {{ active_payment.provider_actual_paid }} {{ active_payment.payment_currency }}</span>{% endif %}
+
+      <div class="payment-address-block">
+        <small>Dirección de pago</small>
+        <code id="active-payment-address">{{ active_payment.pay_address }}</code>
+        <button class="secondary-btn" type="button" data-copy="#active-payment-address" style="width:max-content;min-height:32px;padding:6px 10px">Copiar dirección</button>
+
+        {% if active_payment.ui_extra_id %}
+        <div class="payment-extra-id">
+          <small>MEMO / TAG / EXTRA ID — obligatorio para esta moneda</small>
+          <b id="active-payment-extra">{{ active_payment.ui_extra_id }}</b>
+          <button class="secondary-btn" type="button" data-copy="#active-payment-extra" style="width:max-content;min-height:30px;padding:5px 9px;margin-top:5px">Copiar memo/tag</button>
+        </div>
+        {% endif %}
+      </div>
+
       <small>
         {% if active_payment.provider_status == 'partially_paid' %}
           Pago parcial detectado · completa el faltante.
@@ -48,7 +74,7 @@
           Esperando que llegue el pago.
         {% elif active_payment.provider_status == 'confirming' or active_payment.provider_status == 'confirmed' %}
           Pago detectado · esperando confirmaciones de la red.
-        {% elif active_payment.provider_status == 'sending' %}
+        {% elif active_payment.provider_status == 'sending' or active_payment.provider_status == 'spending' %}
           Confirmación final en proceso.
         {% else %}
           Verificación automática en curso.
@@ -58,9 +84,7 @@
   </div>
 
   <div class="form-policy space-top">
-    <b>Importante.</b>
-    La dirección debe recibir el total exacto indicado arriba. Tu billetera puede cobrar su propia comisión de red por separado;
-    esa comisión no debe restarse del monto que llega a la dirección de pago.
+    <b>Importante.</b> Envía exactamente la moneda, red, dirección y memo/tag mostrados. La comisión que cobre tu billetera o exchange es externa a HBL y no debe reducir el monto que llega a la dirección.
   </div>
 </section>
 {% endif %}
@@ -73,30 +97,53 @@
     </div>
 
     {% if not nowpayments_ready %}
-    <div class="form-policy">
-      <b>Depósitos no disponibles por el momento.</b>
-      Intenta nuevamente más tarde.
-    </div>
+    <div class="form-policy"><b>Depósitos no disponibles por el momento.</b> Intenta nuevamente más tarde.</div>
     {% endif %}
 
     <form method="post" class="form-stack" novalidate>
       {% csrf_token %}
       {{ form.non_field_errors }}
-      {% for field in form %}
+
       <div class="field-row">
-        <label class="field-label" for="{{ field.id_for_label }}">
-          <span>{{ field.label }}</span><span>Obligatorio</span>
-        </label>
-        {{ field }}
-        {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
-        {{ field.errors }}
+        <label class="field-label" for="{{ form.payment_method.id_for_label }}"><span>{{ form.payment_method.label }}</span><span>Obligatorio</span></label>
+        <div class="crypto-picker" data-crypto-picker>
+          {{ form.payment_method }}
+          <button class="crypto-picker-trigger" type="button" data-crypto-trigger aria-haspopup="listbox" aria-expanded="false">
+            <span class="crypto-coin-icon" data-selected-icon>◈</span>
+            <span class="crypto-picker-trigger__meta">
+              <b data-selected-title>Selecciona una criptomoneda</b>
+              <small data-selected-subtitle>{{ methods_count }} opciones sincronizadas con NOWPayments</small>
+            </span>
+            <span class="crypto-picker-chevron">⌄</span>
+          </button>
+          <div class="crypto-picker-menu">
+            <input class="crypto-picker-search" type="search" placeholder="Buscar BTC, ETH, USDT, red..." autocomplete="off" data-crypto-search>
+            <div class="crypto-picker-list" role="listbox">
+              {% for method in methods %}
+              <button type="button" class="crypto-picker-option" role="option"
+                data-crypto-option data-value="{{ method.id }}" data-icon="{{ method.ui_icon }}"
+                data-title="{{ method.label }}" data-subtitle="{{ method.currency }} · {{ method.ui_network }}"
+                data-search="{{ method.label|lower }} {{ method.currency|lower }} {{ method.ui_network|lower }} {{ method.ui_provider_code|lower }}">
+                <span class="crypto-coin-icon">{{ method.ui_icon }}</span>
+                <span class="crypto-picker-option__meta"><b>{{ method.currency }} · {{ method.label }}</b><small>{{ method.ui_network }} · {{ method.ui_provider_code }}</small></span>
+              </button>
+              {% endfor %}
+            </div>
+            <div class="crypto-picker-empty" data-crypto-empty>No encontramos esa moneda o red.</div>
+          </div>
+        </div>
+        {{ form.payment_method.errors }}
       </div>
-      {% endfor %}
+
+      <div class="field-row">
+        <label class="field-label" for="{{ form.payment_amount.id_for_label }}"><span>{{ form.payment_amount.label }}</span><span>Obligatorio</span></label>
+        {{ form.payment_amount }}
+        <small>Ejemplo: escribes 10 USDT → HBL procesa un total comercial de 11 USDT y NOWPayments te dice cuánto enviar en la criptomoneda elegida.</small>
+        {{ form.payment_amount.errors }}
+      </div>
 
       <div class="form-policy">
-        <b>Cargo fijo: 1 USDT.</b>
-        El monto que escribas es exactamente lo que HBL acreditará a tu cuenta. Al crear la orden se sumará 1 USDT al total a pagar.
-        No necesitas pegar TXID ni subir comprobantes: la confirmación es automática.
+        <b>Cargo fijo: 1 USDT.</b> El monto que escribas es exactamente lo que HBL acreditará a tu cuenta. No necesitas pegar TXID ni subir comprobantes: la confirmación se realiza por API/IPN.
       </div>
 
       <button class="primary-btn glow-btn" type="submit" {% if not nowpayments_ready %}disabled{% endif %}>Generar dirección de depósito</button>
@@ -104,116 +151,52 @@
   </section>
 
   <section class="panel">
-    <div class="section-head compact">
-      <div><span class="eyebrow">REDES DISPONIBLES</span><h2>Opciones de depósito</h2></div>
+    <div class="section-head compact"><div><span class="eyebrow">CATÁLOGO NOWPAYMENTS</span><h2>Criptomonedas disponibles</h2></div></div>
+    <div class="crypto-catalog-summary"><div><strong>{{ methods_count }} métodos activos</strong><br><span>La lista se actualiza automáticamente desde NOWPayments.</span></div><span>API LIVE</span></div>
+
+    <div class="crypto-mini-grid">
+      {% for method in featured_methods %}
+      <div class="crypto-mini-card"><span class="crypto-coin-icon">{{ method.ui_icon }}</span><div><b>{{ method.currency }} · {{ method.label }}</b><small>{{ method.ui_network }}</small></div></div>
+      {% empty %}
+      <div class="form-policy"><b>No hay monedas disponibles.</b> Intenta nuevamente más tarde.</div>
+      {% endfor %}
     </div>
 
-    {% for method in methods %}
-    <div class="method-card rich-method">
-      <div class="method-icon">₮</div>
-      <div>
-        <strong>{{ method.label }}</strong>
-        <span>{{ method.currency }} · {{ method.network }}</span>
-        <small>
-          Mínimo a acreditar: {{ method.min_amount }} {{ method.currency }}
-          {% if method.max_amount > 0 %} · Máximo: {{ method.max_amount }} {{ method.currency }}{% endif %}
-          · HBL suma 1 USDT al total
-        </small>
-        {% if method.instructions %}<p>{{ method.instructions }}</p>{% endif %}
-      </div>
-    </div>
-    {% empty %}
-    <div class="form-policy">
-      <b>No hay redes disponibles.</b>
-      Intenta nuevamente más tarde.
-    </div>
-    {% endfor %}
-
-    <div class="form-policy space-top">
-      <b>Seguridad.</b>
-      Envía únicamente USDT y usa exactamente la red indicada. Una red incorrecta puede ocasionar la pérdida de los fondos.
-      HBL nunca te pedirá frase semilla, clave privada, contraseña ni códigos 2FA.
-    </div>
+    {% if methods_count > 12 %}<div class="form-policy space-top"><b>Hay más opciones.</b> Abre el selector de la izquierda y usa el buscador para ver todas las criptomonedas y redes disponibles.</div>{% endif %}
+    <div class="form-policy space-top"><b>Seguridad.</b> HBL nunca te pedirá frase semilla, clave privada, contraseña ni códigos 2FA.</div>
   </section>
 </div>
 
 <section class="panel space-top">
-  <div class="section-head compact">
-    <div><span class="eyebrow">HISTORIAL</span><h2>Últimas recargas</h2></div>
-  </div>
-
+  <div class="section-head compact"><div><span class="eyebrow">HISTORIAL</span><h2>Últimas recargas</h2></div></div>
   <div class="table-wrap">
     <table>
-      <thead>
-        <tr><th>Fecha</th><th>Red</th><th>Acreditas</th><th>Cargo HBL</th><th>Total</th><th>Recibido</th><th>Estado</th><th>Detalle</th></tr>
-      </thead>
+      <thead><tr><th>Fecha</th><th>Método</th><th>Acreditas</th><th>Cargo HBL</th><th>Total enviado</th><th>Recibido</th><th>Estado</th><th>Detalle</th></tr></thead>
       <tbody>
         {% for dep in deposits %}
         <tr>
           <td>{{ dep.submitted_at|date:'d/m/Y H:i' }}</td>
-          <td>{{ dep.payment_method.label }}</td>
-          <td>{{ dep.provider_price_amount|default:dep.payment_amount }} {{ dep.payment_currency }}</td>
+          <td>{{ dep.ui_icon }} {{ dep.payment_method.label }}</td>
+          <td>{{ dep.provider_price_amount|default:dep.payment_amount }} USDT</td>
           <td>{% if dep.provider_payment_id %}{{ dep.operation_fee_usdt }} USDT{% else %}—{% endif %}</td>
           <td>{{ dep.payment_amount }} {{ dep.payment_currency }}</td>
-          <td>
-            {% if dep.provider_actual_paid %}
-              {{ dep.provider_actual_paid }} {{ dep.payment_currency }}
-            {% elif dep.provider_payment_id %}
-              <span class="muted">Pendiente</span>
-            {% else %}—{% endif %}
-          </td>
+          <td>{% if dep.provider_actual_paid %}{{ dep.provider_actual_paid }} {{ dep.payment_currency }}{% elif dep.provider_payment_id %}<span class="muted">Pendiente</span>{% else %}—{% endif %}</td>
           <td><span class="status {{ dep.status }}">{{ dep.get_status_display }}</span></td>
           <td>
-            {% if dep.is_partial_payment %}
-              <span>Pago parcial · faltan <b>{{ dep.remaining_payment }} USDT</b></span>
-            {% elif dep.status == 'processing' %}
-              <span class="muted">Esperando confirmación automática</span>
-            {% elif dep.status == 'pending' %}
-              <span class="muted">Verificación de seguridad en curso</span>
-            {% elif dep.status == 'approved' %}
-              <span class="positive">Confirmada y acreditada</span>
-            {% elif dep.status == 'rejected' %}
-              <span class="negative">No acreditada</span>
-            {% elif dep.status == 'expired' %}
-              <span class="muted">Orden expirada</span>
-            {% endif %}
+            {% if dep.is_partial_payment %}<span>Pago parcial · faltan <b>{{ dep.remaining_payment }} {{ dep.payment_currency }}</b></span>
+            {% elif dep.status == 'processing' %}<span class="muted">Esperando confirmación automática</span>
+            {% elif dep.status == 'pending' %}<span class="muted">Verificación de seguridad en curso</span>
+            {% elif dep.status == 'approved' %}<span class="positive">Confirmada y acreditada</span>
+            {% elif dep.status == 'rejected' %}<span class="negative">No acreditada</span>
+            {% elif dep.status == 'expired' %}<span class="muted">Orden expirada</span>{% endif %}
             {% if dep.provider_payment_id %}<small class="muted">Orden #{{ dep.provider_payment_id }}</small>{% endif %}
           </td>
         </tr>
-        {% empty %}
-        <tr><td colspan="8">Todavía no tienes recargas.</td></tr>
-        {% endfor %}
+        {% empty %}<tr><td colspan="8">Todavía no tienes recargas.</td></tr>{% endfor %}
       </tbody>
     </table>
   </div>
 </section>
+</div>
 {% endblock %}
-
-{% block scripts %}
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const url = "{% url 'hbl_crypto_recheck' %}";
-  let attempts = 0;
-  const maxAttempts = 36;
-
-  const poll = async () => {
-    if (!window.HBL?.post || attempts >= maxAttempts) return;
-    attempts += 1;
-    try {
-      const response = await window.HBL.post(url);
-      if (!response.ok) return;
-      const data = await response.json();
-      if (data.approved > 0) {
-        window.location.reload();
-        return;
-      }
-      if (data.processing > 0) window.setTimeout(poll, 10000);
-    } catch (_) {
-      if (attempts < maxAttempts) window.setTimeout(poll, 15000);
-    }
-  };
-
-  window.setTimeout(poll, 5000);
-});
-</script>
-{% endblock %}
+{% block scripts %}<script defer src="{% static 'hbl/js/wallet_crypto.js' %}"></script>{% endblock %}
