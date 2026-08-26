@@ -53,7 +53,13 @@ class CryptoDepositForm(forms.Form):
             if settings.NOWPAYMENTS_TEST_MODE
             else Decimal(config.minimum_deposit_usd)
         )
-        method_min = max(Decimal(method.min_amount or 0), global_min_usdt)
+        # El modo de prueba es un override explícito: debe permitir el mínimo
+        # configurado aunque un método guardado en producción conserve un mínimo mayor.
+        method_min = (
+            global_min_usdt
+            if settings.NOWPAYMENTS_TEST_MODE
+            else max(Decimal(method.min_amount or 0), global_min_usdt)
+        )
         if Decimal(amount) < method_min:
             self.add_error(
                 "payment_amount",
