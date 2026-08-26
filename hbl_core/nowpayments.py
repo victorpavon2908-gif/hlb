@@ -126,10 +126,12 @@ class NowPaymentsClient:
         order_id: str,
         callback_url: str,
         fee_paid_by_user: bool | None = None,
+        pay_amount: Decimal | None = None,
     ) -> dict:
         if fee_paid_by_user is None:
             fee_paid_by_user = settings.NOWPAYMENTS_FEE_PAID_BY_USER
-        return self._request("POST", "payment", {
+
+        payload = {
             "price_amount": format(Decimal(price_amount), "f"),
             "price_currency": "usd",
             "pay_currency": pay_currency,
@@ -137,7 +139,16 @@ class NowPaymentsClient:
             "order_id": order_id,
             "order_description": "Recarga de saldo HBL",
             "is_fee_paid_by_user": bool(fee_paid_by_user),
-        })
+        }
+        if pay_amount is not None:
+            exact_pay_amount = Decimal(pay_amount)
+            if exact_pay_amount <= 0:
+                raise NowPaymentsError("El monto exacto a pagar debe ser mayor que cero.")
+            # NOWPayments admite pay_amount como monto cripto explícito. Esto evita
+            # que la cotización USD→USDT cambie 11 USDT a 11.017... USDT.
+            payload["pay_amount"] = format(exact_pay_amount, "f")
+
+        return self._request("POST", "payment", payload)
 
     def get_payment(self, payment_id: str) -> dict:
         payment_id = str(payment_id).strip()
@@ -147,7 +158,7 @@ class NowPaymentsClient:
 
 
 def create_payment_for_deposit(deposit: Deposit, callback_url: str, client: NowPaymentsClient | None = None) -> dict:
-    """Crea una orden cuyo total incluye siempre 1 USDT sobre el saldo a acreditar."""
+    """Crea una orden cuyo total incluye siempre exactamente 1 USDT sobre el saldo a acreditar."""
     client = client or NowPaymentsClient()
     pay_currency = pay_currency_for_kind(deposit.payment_method.kind)
     requested_credit = _decimal(deposit.provider_price_amount, "price_amount")
@@ -157,6 +168,7 @@ def create_payment_for_deposit(deposit: Deposit, callback_url: str, client: NowP
     order_price = usdt_total_with_fee(requested_credit)
     data = client.create_payment(
         price_amount=order_price,
+        pay_amount=order_price,
         pay_currency=pay_currency,
         order_id=order_id_for(deposit.id),
         callback_url=callback_url,
@@ -166,13 +178,17 @@ def create_payment_for_deposit(deposit: Deposit, callback_url: str, client: NowP
     pay_address = str(data.get("pay_address") or "").strip()
     returned_currency = str(data.get("pay_currency") or "").strip().lower()
     returned_price = _decimal(data.get("price_amount"), "price_amount")
-    pay_amount = _decimal(data.get("pay_amount"), "pay_amount")
-    if not payment_id.isdigit() or not pay_address or pay_amount <= 0:
+    returned_pay_amount = _decimal(data.get("pay_amount"), "pay_amount")
+    if not payment_id.isdigit() or not pay_address or returned_pay_amount <= 0:
         raise NowPaymentsError("NOWPayments no devolvió instrucciones de pago completas.")
     if returned_currency != pay_currency or returned_price != order_price:
         raise NowPaymentsError("NOWPayments devolvió una moneda o monto distinto al solicitado.")
+    if returned_pay_amount != order_price:
+        raise NowPaymentsError(
+            "NOWPayments no respetó el total exacto solicitado. Intenta crear una nueva orden."
+        )
 
-    total_extra = usdt_fee_from_total(pay_amount, requested_credit)
+    total_extra = usdt_fee_from_total(returned_pay_amount, requested_credit)
     if total_extra < USDT_OPERATION_FEE:
         total_extra = USDT_OPERATION_FEE
 
@@ -180,7 +196,7 @@ def create_payment_for_deposit(deposit: Deposit, callback_url: str, client: NowP
         "payment_id": payment_id,
         "payment_status": str(data.get("payment_status") or "waiting").strip().lower(),
         "pay_address": pay_address,
-        "pay_amount": pay_amount,
+        "pay_amount": returned_pay_amount,
         "pay_currency": returned_currency,
         "price_amount": returned_price,
         "fee_amount": total_extra.quantize(Decimal("0.00000001")),
