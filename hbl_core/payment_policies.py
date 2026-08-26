@@ -10,6 +10,10 @@ CRYPTO_DEPOSIT_KINDS = ("usdt_trc20", "usdt_bep20", "crypto_other")
 CRYPTO_WITHDRAWAL_SLUGS = ("usdt-trc20", "usdt-bep20")
 CRYPTO_WITHDRAWAL_IDENTIFIER_TYPES = ("trc20", "bep20")
 
+# Política financiera global HBL: ninguna recarga puede acreditar menos de
+# 10 USDT, sin importar usuario, moneda elegida, red o modo de prueba.
+GLOBAL_MIN_DEPOSIT_USDT = Decimal("10.00000000")
+
 # Regla comercial HBL: cada depósito/retiro lleva un cargo fijo equivalente a
 # 1 USDT. En depósitos el usuario acredita el monto solicitado y paga 1 USDT
 # adicional, aunque elija pagar con BTC, ETH u otra criptomoneda. En retiros,
