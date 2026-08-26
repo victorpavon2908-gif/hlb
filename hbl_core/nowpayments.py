@@ -154,10 +154,6 @@ def create_payment_for_deposit(deposit: Deposit, callback_url: str, client: NowP
     if requested_credit <= 0:
         raise NowPaymentsError("El monto del depósito debe ser mayor que cero.")
 
-    # HBL acredita requested_credit, pero la orden remota se crea por +1 USDT.
-    # NOWPayments no añade su comisión de servicio al pagador: el cargo fijo HBL
-    # ya está incluido en el precio de la orden. La billetera del usuario todavía
-    # puede cobrar su propia comisión de red por enviar.
     order_price = usdt_total_with_fee(requested_credit)
     data = client.create_payment(
         price_amount=order_price,
@@ -178,8 +174,6 @@ def create_payment_for_deposit(deposit: Deposit, callback_url: str, client: NowP
 
     total_extra = usdt_fee_from_total(pay_amount, requested_credit)
     if total_extra < USDT_OPERATION_FEE:
-        # El cargo comercial de HBL es fijo aunque la cotización del proveedor
-        # redondee el pay_amount ligeramente por debajo del price_amount.
         total_extra = USDT_OPERATION_FEE
 
     return {
@@ -243,8 +237,12 @@ def apply_payment_status(deposit_id, data: dict):
     except NowPaymentsError:
         return _manual_review(deposit, provider_status, "NOWPayments no informó un monto verificable. Revisión administrativa requerida.")
 
-    expected_price = usdt_total_with_fee(Decimal(deposit.provider_price_amount))
-    if price_amount != expected_price:
+    credit_amount = Decimal(deposit.provider_price_amount)
+    new_price = usdt_total_with_fee(credit_amount)
+    # Compatibilidad con órdenes que ya estaban abiertas antes de activar la
+    # regla fija +1 USDT. Esas órdenes conservan su precio original y pueden
+    # terminar normalmente sin quedar bloqueadas por la actualización.
+    if price_amount not in {credit_amount, new_price}:
         return _manual_review(deposit, provider_status, "El monto informado por NOWPayments no coincide con la orden HBL. Revisión administrativa requerida.")
 
     actually_paid = data.get("actually_paid")
@@ -260,8 +258,6 @@ def apply_payment_status(deposit_id, data: dict):
 
     deposit.provider_status = provider_status[:32]
     if provider_status == FINAL_STATUS:
-        # Una orden puede recibir el pago después de haber aparecido expirada.
-        # La consulta autenticada al proveedor permite reabrirla de forma segura.
         deposit.status = Deposit.Status.PROCESSING
         deposit.save(update_fields=["provider_status", "provider_actual_paid", "status"])
         return approve_deposit(
