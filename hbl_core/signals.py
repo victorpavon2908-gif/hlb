@@ -2,11 +2,11 @@ import logging
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models.signals import post_save, pre_save
+from django.db.models.signals import m2m_changed, post_save, pre_save
 from django.dispatch import receiver
 
 from .crypto_payments import verify_and_credit_deposit
-from .models import Deposit, PaymentMethod, PlatformConfig
+from .models import Deposit, PaymentMethod, PlatformConfig, Track
 from .payment_policies import CRYPTO_DEPOSIT_KINDS, GLOBAL_MIN_DEPOSIT_USDT
 
 logger = logging.getLogger(__name__)
@@ -39,6 +39,22 @@ def lock_crypto_method_minimum(sender, instance, **kwargs):
     """Evita que un método individual contradiga el mínimo global de 10 USDT."""
     if instance.kind in CRYPTO_DEPOSIT_KINDS:
         instance.min_amount = GLOBAL_MIN_DEPOSIT_USDT
+
+
+@receiver(
+    m2m_changed,
+    sender=Track.allowed_plans.through,
+    dispatch_uid="hbl_tracks_are_global_catalog",
+)
+def keep_tracks_global(sender, action, pk_set, **kwargs):
+    """HLB usa un único catálogo musical para todos los planes.
+
+    El campo M2M se conserva temporalmente por compatibilidad con la base
+    existente, pero no permitimos nuevas asociaciones canción↔plan. Así todos
+    los niveles toman sus tareas del mismo catálogo de canciones activas.
+    """
+    if action == "pre_add" and pk_set is not None:
+        pk_set.clear()
 
 
 @receiver(post_save, sender=Deposit, dispatch_uid="hbl_auto_verify_crypto_deposit")
