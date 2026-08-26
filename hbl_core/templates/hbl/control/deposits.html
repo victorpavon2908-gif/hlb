@@ -6,9 +6,7 @@
   <form method="get">
     <select name="status" class="control-input">
       <option value="">Todos</option>
-      {% for value,label in status_choices %}
-      <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
+      {% for value,label in status_choices %}<option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
     </select>
     <button class="secondary-btn">Filtrar</button>
   </form>
@@ -16,84 +14,23 @@
 
 <div class="panel table-wrap">
   <table>
-    <thead>
-      <tr>
-        <th>Usuario</th>
-        <th>Red</th>
-        <th>A acreditar</th>
-        <th>Cargo HBL</th>
-        <th>Total</th>
-        <th>Recibido</th>
-        <th>Crédito</th>
-        <th>Proveedor</th>
-        <th>Estado</th>
-        <th>Fecha</th>
-        <th>Acción</th>
-      </tr>
-    </thead>
+    <thead><tr><th>Usuario</th><th>Método</th><th>A acreditar</th><th>Cargo HBL</th><th>Total cripto</th><th>Recibido</th><th>Crédito</th><th>Proveedor</th><th>Estado</th><th>Fecha</th><th>Acción</th></tr></thead>
     <tbody>
       {% for d in page_obj %}
       <tr>
         <td>{{ d.user.username }}</td>
-        <td>{{ d.payment_method.label }}</td>
-        <td>
-          {% if d.provider_payment_id %}{{ d.provider_price_amount }}{% else %}{{ d.payment_amount }}{% endif %}
-          {{ d.payment_currency }}
-        </td>
-        <td>{% if d.provider_payment_id %}{{ d.provider_fee_amount }} {{ d.payment_currency }}{% else %}—{% endif %}</td>
+        <td><b>{{ d.payment_method.currency }}</b><br><small>{{ d.payment_method.label }}</small></td>
+        <td>{% if d.provider_payment_id %}{{ d.provider_price_amount }} USDT{% else %}{{ d.payment_amount }} {{ d.payment_currency }}{% endif %}</td>
+        <td>{% if d.provider_payment_id %}{{ d.provider_fee_amount }} USDT{% else %}—{% endif %}</td>
         <td>{{ d.payment_amount }} {{ d.payment_currency }}</td>
-        <td>
-          {% if d.provider_actual_paid %}
-          <strong>{{ d.provider_actual_paid }} {{ d.payment_currency }}</strong>
-          {% elif d.provider_payment_id %}
-          <span class="muted">Pendiente</span>
-          {% else %}—{% endif %}
-        </td>
+        <td>{% if d.provider_actual_paid %}<strong>{{ d.provider_actual_paid }} {{ d.payment_currency }}</strong>{% elif d.provider_payment_id %}<span class="muted">Pendiente</span>{% else %}—{% endif %}</td>
         <td>{{ platform_config.base_currency_symbol|default:"C$" }} {{ d.amount }}</td>
-        <td>
-          <small>
-            {% if d.provider_payment_id %}
-            #{{ d.provider_payment_id }}<br>
-            {% if d.provider_status == 'partially_paid' %}Pago parcial
-            {% elif d.provider_status == 'waiting' %}Esperando pago
-            {% elif d.provider_status == 'confirming' or d.provider_status == 'confirmed' %}Confirmando
-            {% elif d.provider_status == 'sending' %}Finalizando
-            {% elif d.provider_status == 'finished' %}Finalizado
-            {% elif d.provider_status %}{{ d.provider_status }}
-            {% else %}—{% endif %}
-            {% else %}
-            {{ d.txid|default:d.reference|default:'Manual' }}
-            {% endif %}
-          </small>
-        </td>
+        <td><small>{% if d.provider_payment_id %}#{{ d.provider_payment_id }}<br>{% if d.provider_status == 'partially_paid' %}Pago parcial{% elif d.provider_status == 'waiting' %}Esperando pago{% elif d.provider_status == 'confirming' or d.provider_status == 'confirmed' %}Confirmando{% elif d.provider_status == 'sending' or d.provider_status == 'spending' %}Finalizando{% elif d.provider_status == 'finished' %}Finalizado{% elif d.provider_status %}{{ d.provider_status }}{% else %}—{% endif %}{% else %}{{ d.txid|default:d.reference|default:'Manual' }}{% endif %}</small></td>
         <td><span class="status {{ d.status }}">{{ d.get_status_display }}</span></td>
         <td>{{ d.submitted_at|date:'d/m/Y H:i' }}</td>
-        <td>
-          {% if d.status == 'pending' or d.status == 'processing' %}
-          <div class="action-stack">
-            {% if d.provider_payment_id %}
-            <form method="post" action="{% url 'hbl_control_deposit_action' d.id 'refresh' %}">
-              {% csrf_token %}
-              <button class="secondary-btn">Actualizar</button>
-            </form>
-            {% endif %}
-            <form method="post" action="{% url 'hbl_control_deposit_action' d.id 'approve' %}">
-              {% csrf_token %}
-              <input class="mini-input" name="note" maxlength="240" placeholder="Nota opcional">
-              <button class="primary-btn">Aprobar</button>
-            </form>
-            <form method="post" action="{% url 'hbl_control_deposit_action' d.id 'reject' %}">
-              {% csrf_token %}
-              <input class="mini-input" name="note" minlength="5" maxlength="240" required placeholder="Motivo del rechazo">
-              <button class="secondary-btn">Rechazar</button>
-            </form>
-          </div>
-          {% endif %}
-        </td>
+        <td>{% if d.status == 'pending' or d.status == 'processing' %}<div class="action-stack">{% if d.provider_payment_id %}<form method="post" action="{% url 'hbl_control_deposit_action' d.id 'refresh' %}">{% csrf_token %}<button class="secondary-btn">Actualizar</button></form>{% endif %}<form method="post" action="{% url 'hbl_control_deposit_action' d.id 'approve' %}">{% csrf_token %}<input class="mini-input" name="note" maxlength="240" placeholder="Nota opcional"><button class="primary-btn">Aprobar</button></form><form method="post" action="{% url 'hbl_control_deposit_action' d.id 'reject' %}">{% csrf_token %}<input class="mini-input" name="note" minlength="5" maxlength="240" required placeholder="Motivo del rechazo"><button class="secondary-btn">Rechazar</button></form></div>{% endif %}</td>
       </tr>
-      {% empty %}
-      <tr><td colspan="11">Sin recargas.</td></tr>
-      {% endfor %}
+      {% empty %}<tr><td colspan="11">Sin recargas.</td></tr>{% endfor %}
     </tbody>
   </table>
 </div>
