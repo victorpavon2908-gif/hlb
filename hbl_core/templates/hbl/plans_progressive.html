@@ -1,0 +1,79 @@
+{% extends 'hbl/base.html' %}
+{% block title %}Planes · HLB{% endblock %}
+{% block content %}
+<section class="page-title">
+  <span class="eyebrow">PLANES HLB MUSIC</span>
+  <h1>Elige tu siguiente nivel.</h1>
+  <p>Puedes mantener varios niveles activos al mismo tiempo. Solo se permite una membresía activa por nivel y, después de activar una, la siguiente debe ser de un nivel superior.</p>
+</section>
+
+{% if active_memberships %}
+<section class="panel space-top">
+  <div class="plan-top">
+    <div>
+      <span class="eyebrow">TUS PLANES ACTIVOS</span>
+      <h2>{{ active_memberships|length }} nivel{{ active_memberships|length|pluralize:"es" }} activo{{ active_memberships|length|pluralize:"s" }}</h2>
+    </div>
+    {% if highest_active %}<span class="status paid">Nivel actual: {{ highest_active.plan.name }}</span>{% endif %}
+  </div>
+  <div class="plan-grid space-top">
+    {% for membership in active_memberships %}
+    <article class="plan-card" style="--plan-from: {{ membership.plan.accent_from }}; --plan-to: {{ membership.plan.accent_to }};">
+      <div class="plan-top"><span class="eyebrow">ACTIVO</span><span class="status paid">✓</span></div>
+      <h2>{{ membership.plan.icon }} {{ membership.plan.name }}</h2>
+      <div class="plan-price"><strong>US$ {{ membership.price_usd_snapshot }}</strong></div>
+      <p>Vence {{ membership.ends_at|date:'d/m/Y H:i' }}</p>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if upgrade_option %}
+<section class="panel space-top control-highlight">
+  <span class="eyebrow">SUBIDA POR REFERIDOS</span>
+  <h2>Ya puedes subir de nivel</h2>
+  <p>Tienes {{ upgrade_option.qualified_referrals }} referido(s) calificados. Puedes pasar de <b>{{ upgrade_option.membership.plan.name }}</b> a <b>{{ upgrade_option.next_plan.name }}</b>.</p>
+  <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claim_upgrade"><button class="primary-btn">Subir de nivel</button></form>
+</section>
+{% endif %}
+
+<div class="plan-grid space-top">
+{% for item in plan_items %}{% with p=item.plan %}
+<article class="plan-card {% if p.featured %}featured{% endif %}" style="--plan-from: {{ p.accent_from }}; --plan-to: {{ p.accent_to }};">
+  <div class="plan-top">
+    <span class="eyebrow">{{ p.badge|default:'HBL MUSIC' }}</span>
+    {% if item.is_active %}<span class="status paid">Activo</span>{% elif p.featured %}<span class="status paid">Recomendado</span>{% endif %}
+  </div>
+  <h2>{{ p.icon }} {{ p.name }}</h2>
+  <div class="plan-price"><strong>US$ {{ p.price_usd }}</strong><span>≈ {{ config.base_currency_symbol|default:'C$' }} {{ item.cost_nio }}</span></div>
+  <p>{{ p.description|default:'Membresía HBL Music con recompensas por tareas de escucha.' }}</p>
+  <div class="plan-metrics">
+    <div><small>Recompensa diaria configurada</small><b>{{ config.base_currency_symbol|default:'C$' }} {{ p.daily_reward_nio }}</b></div>
+    <div><small>Canciones</small><b>{{ p.daily_tracks }}/día</b></div>
+    <div><small>Vigencia</small><b>{{ p.duration_days }} días</b></div>
+    <div><small>Proyección del ciclo</small><b>US$ {{ item.cycle_usd }}</b></div>
+  </div>
+
+  {% if item.is_active %}
+    <button class="primary-btn" disabled>Ya tienes este nivel</button>
+  {% elif not item.can_buy %}
+    <button class="primary-btn" disabled>Solo nivel superior</button>
+    <small class="muted">{{ item.block_reason }}</small>
+  {% elif request.user.saldo >= item.cost_nio %}
+    <form method="post">{% csrf_token %}<input type="hidden" name="plan_id" value="{{ p.id }}"><button class="primary-btn">Activar este nivel</button></form>
+  {% else %}
+    <a class="primary-btn inline" href="{% url 'hbl_wallet' %}">Recargar para activar</a>
+    <small class="negative">Te faltan fondos para {{ config.base_currency_symbol|default:'C$' }} {{ item.cost_nio }}.</small>
+  {% endif %}
+</article>
+{% endwith %}{% empty %}
+<div class="empty-state">No hay planes activos todavía.</div>
+{% endfor %}
+</div>
+
+<section class="panel space-top legal-panel">
+  <h2>Regla de niveles</h2>
+  <p>Una sola membresía activa por nivel. Si ya tienes un nivel activo, únicamente puedes añadir otro que sea superior. Tus niveles anteriores permanecen registrados como activos hasta su fecha de vencimiento.</p>
+</section>
+{% endblock %}
