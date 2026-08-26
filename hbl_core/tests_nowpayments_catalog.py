@@ -1,5 +1,5 @@
 from decimal import Decimal
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -54,6 +54,35 @@ class NowPaymentsCatalogTests(TestCase):
         self.assertTrue(PaymentMethod.objects.filter(destination="eth", kind=PaymentMethod.Kind.CRYPTO_OTHER, active=True).exists())
         self.assertTrue(PaymentMethod.objects.filter(destination="usdttrc20", active=True).exists())
         self.assertTrue(PaymentMethod.objects.filter(destination="usdtbsc", active=True).exists())
+
+    def test_sync_handles_large_catalog_in_bulk(self):
+        client = MagicMock()
+        client.get_merchant_currencies.return_value = {
+            "selectedCurrencies": [f"coin{i}" for i in range(150)]
+        }
+        count = sync_nowpayments_methods(force=True, client=client)
+        self.assertEqual(count, 150)
+        self.assertEqual(
+            PaymentMethod.objects.filter(kind=PaymentMethod.Kind.CRYPTO_OTHER, active=True).count(),
+            150,
+        )
+
+    @patch("hbl_core.payment_views.sync_nowpayments_methods")
+    def test_wallet_does_not_sync_catalog_when_methods_already_exist(self, sync_mock):
+        PaymentMethod.objects.create(
+            kind=PaymentMethod.Kind.USDT_TRC20,
+            label="Tether TRC20",
+            currency="USDT",
+            network="TRON (TRC20)",
+            destination="usdttrc20",
+            min_amount=Decimal("1"),
+            balance_rate=Decimal("36.62"),
+            active=True,
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("hbl_wallet"))
+        self.assertEqual(response.status_code, 200)
+        sync_mock.assert_not_called()
 
     def test_non_usdt_payment_uses_provider_crypto_quote(self):
         method = PaymentMethod.objects.create(
