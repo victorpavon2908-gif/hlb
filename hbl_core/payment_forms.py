@@ -1,10 +1,9 @@
 from decimal import Decimal
 
 from django import forms
-from django.conf import settings
 
-from .models import PaymentMethod, PlatformConfig
-from .payment_policies import CRYPTO_DEPOSIT_KINDS
+from .models import PaymentMethod
+from .payment_policies import CRYPTO_DEPOSIT_KINDS, GLOBAL_MIN_DEPOSIT_USDT
 
 
 class CryptoDepositForm(forms.Form):
@@ -14,9 +13,12 @@ class CryptoDepositForm(forms.Form):
     )
     payment_amount = forms.DecimalField(
         label="Monto que deseas acreditar (USDT)",
-        min_value=Decimal("0.00000001"),
+        min_value=GLOBAL_MIN_DEPOSIT_USDT,
         max_digits=18,
         decimal_places=8,
+        error_messages={
+            "min_value": "El depósito mínimo global es 10 USDT.",
+        },
     )
 
     def __init__(self, *args, **kwargs):
@@ -31,9 +33,11 @@ class CryptoDepositForm(forms.Form):
         })
         self.fields["payment_amount"].widget.attrs.update({
             "class": "hbl-input",
-            "placeholder": "Ej. 10.00",
+            "placeholder": "Mínimo 10.00 USDT",
             "autocomplete": "off",
             "inputmode": "decimal",
+            "min": "10",
+            "step": "0.00000001",
         })
 
     def clean(self):
@@ -47,23 +51,12 @@ class CryptoDepositForm(forms.Form):
             self.add_error("payment_method", "Selecciona una criptomoneda disponible en NOWPayments.")
             return cleaned
 
-        config = PlatformConfig.get_solo()
-        global_min_usdt = (
-            Decimal(settings.NOWPAYMENTS_TEST_MIN_USDT)
-            if settings.NOWPAYMENTS_TEST_MODE
-            else Decimal(config.minimum_deposit_usd)
-        )
-        # El modo de prueba es un override explícito: debe permitir el mínimo
-        # configurado aunque un método guardado en producción conserve un mínimo mayor.
-        method_min = (
-            global_min_usdt
-            if settings.NOWPAYMENTS_TEST_MODE
-            else max(Decimal(method.min_amount or 0), global_min_usdt)
-        )
-        if Decimal(amount) < method_min:
+        # Regla única para todos: el mínimo siempre es 10 USDT, incluso en
+        # modo de prueba y aunque un método antiguo conserve otro mínimo.
+        if Decimal(amount) < GLOBAL_MIN_DEPOSIT_USDT:
             self.add_error(
                 "payment_amount",
-                f"El mínimo que puedes acreditar con este método es {method_min} USDT.",
+                "El depósito mínimo global es 10 USDT.",
             )
         if method.max_amount and Decimal(method.max_amount) > 0 and Decimal(amount) > Decimal(method.max_amount):
             self.add_error(
