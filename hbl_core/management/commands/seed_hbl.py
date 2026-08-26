@@ -16,7 +16,7 @@ from accounts.currencies import CURRENCY_CHOICES, CRYPTO_CURRENCY_CHOICES, COMMO
 
 
 class Command(BaseCommand):
-    help = "Crea la base inicial de HBL Pro: configuración, plan ejemplo, métodos, referidos y audios demo."
+    help = "Crea la base inicial de HBL Pro: configuración, catálogo de planes, métodos, referidos y audios demo."
 
     def _make_demo_audio(self, filename, base_freq):
         storage_name = f"hbl/audio/{filename}"
@@ -47,8 +47,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         # El comando es idempotente: una segunda ejecución NO pisa reglas cambiadas
-        # posteriormente desde HBL Control, salvo las políticas financieras globales
-        # que HBL debe mantener consistentes en todos los despliegues.
+        # posteriormente desde HBL Control, salvo el catálogo oficial de planes y las
+        # políticas financieras globales que HBL debe mantener consistentes.
         config = PlatformConfig.get_solo()
 
         # Catálogo completo de monedas fiat. Se crean inactivas hasta que administración configure su tasa.
@@ -65,10 +65,13 @@ class Command(BaseCommand):
             code=config.base_currency_code.upper(),
             defaults={"name": config.base_currency_code.upper(), "symbol": config.base_currency_symbol, "rate_to_base": Decimal("1.0"), "active": True},
         )
-        CurrencyRate.objects.get_or_create(
+        usd_rate_row, _ = CurrencyRate.objects.get_or_create(
             code="USD",
             defaults={"name": "US Dollar", "symbol": "$", "rate_to_base": Decimal(config.exchange_rate_usd_nio), "active": True},
         )
+        usd_rate = Decimal(usd_rate_row.rate_to_base or 0)
+        if usd_rate <= 0:
+            usd_rate = Decimal(config.exchange_rate_usd_nio)
         usdt_rate_row, _ = CurrencyRate.objects.get_or_create(
             code="USDT",
             defaults={"name": "Tether USD", "symbol": "₮", "rate_to_base": Decimal(config.exchange_rate_usd_nio), "active": True},
@@ -84,21 +87,47 @@ class Command(BaseCommand):
                 defaults={"name": label.split("—", 1)[-1].strip(), "symbol": code, "rate_to_base": Decimal("1.0"), "active": False},
             )
 
-        plan, _ = MembershipPlan.objects.get_or_create(
-            slug="hbl-100",
-            defaults={
-                "name": "HBL 100",
-                "description": "Nivel mensual de ejemplo: completa 3 canciones diarias para recibir la recompensa configurada.",
-                "price_usd": 100,
-                "daily_reward_nio": 122,
-                "daily_tracks": 3,
-                "duration_days": 30,
-                "badge": "Nivel destacado",
-                "featured": True,
-                "active": True,
-                "sort_order": 10,
-            },
-        )
+        # Catálogo oficial HLB: 10 niveles, 365 días y retorno diario simple del 5%.
+        # La plataforma maneja el saldo en moneda base, por eso convertimos el 5% de
+        # cada precio USD usando la tasa USD activa al momento del despliegue.
+        plan_specs = [
+            ("hbl-basico-20", "BÁSICO", Decimal("20.00"), "🎵", "Inicio HBL", False, 10, "#16C8FF", "#5B7CFF"),
+            ("hbl-estandar-100", "ESTÁNDAR", Decimal("100.00"), "🎶", "Popular", True, 20, "#10D7C4", "#43E27D"),
+            ("hbl-avanzado-300", "AVANZADO", Decimal("300.00"), "🎧", "Avanzado", False, 30, "#8BD52B", "#35D88B"),
+            ("hbl-premium-800", "PREMIUM", Decimal("800.00"), "🎼", "Premium", False, 40, "#F6C526", "#FF9E2A"),
+            ("hbl-exclusivo-1500", "EXCLUSIVO", Decimal("1500.00"), "🎤", "Exclusivo", False, 50, "#FF8A18", "#FF5A36"),
+            ("hbl-vip-4500", "VIP", Decimal("4500.00"), "🎹", "VIP", False, 60, "#FF4F9A", "#E547D8"),
+            ("hbl-elite-10000", "ÉLITE", Decimal("10000.00"), "🎷", "Élite", False, 70, "#B84DFF", "#7D5CFF"),
+            ("hbl-maestro-20000", "MAESTRO", Decimal("20000.00"), "🎻", "Maestro", False, 80, "#9D4DFF", "#C346FF"),
+            ("hbl-leyenda-50000", "LEYENDA", Decimal("50000.00"), "🏆", "Leyenda", False, 90, "#FFD34D", "#FF9E2A"),
+            ("hbl-diamante-100000", "DIAMANTE", Decimal("100000.00"), "💎", "Diamante", False, 100, "#28D7FF", "#36F0E0"),
+        ]
+        official_plan_slugs = []
+        for slug, name, price_usd, icon, badge, featured, sort_order, accent_from, accent_to in plan_specs:
+            official_plan_slugs.append(slug)
+            daily_reward_usd = (price_usd * Decimal("0.05")).quantize(Decimal("0.01"))
+            daily_reward_base = (daily_reward_usd * usd_rate).quantize(Decimal("0.01"))
+            MembershipPlan.objects.update_or_create(
+                slug=slug,
+                defaults={
+                    "name": name,
+                    "description": "Completa 3 canciones diarias para recibir la recompensa programada del nivel. Proyección simple: 5% diario sobre el valor USD del plan durante 365 días.",
+                    "price_usd": price_usd,
+                    "daily_reward_nio": daily_reward_base,
+                    "daily_tracks": 3,
+                    "duration_days": 365,
+                    "badge": badge,
+                    "icon": icon,
+                    "accent_from": accent_from,
+                    "accent_to": accent_to,
+                    "featured": featured,
+                    "active": True,
+                    "sort_order": sort_order,
+                },
+            )
+
+        # El plan demo anterior queda fuera del catálogo nuevo, sin borrar membresías históricas.
+        MembershipPlan.objects.filter(slug="hbl-100").update(active=False)
 
         methods = [
             (PaymentMethod.Kind.USDT_TRC20, "USDT por TRC20", "USDT", "TRON (TRC20)", Decimal(config.exchange_rate_usd_nio)),
@@ -205,5 +234,5 @@ class Command(BaseCommand):
                 track.save(update_fields=["min_listen_seconds"])
 
         self.stdout.write(self.style.SUCCESS(
-            "HBL Ultra inicializado: HBL 100 + audios demo + retiros administrables + ruleta promocional. Entra a /control/."
+            "HBL Ultra inicializado: 10 planes oficiales al 5% diario + audios demo + retiros administrables + ruleta promocional. Entra a /control/."
         ))
