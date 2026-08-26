@@ -11,6 +11,7 @@
   <link rel="icon" href="{% static 'hbl/img/icon-192.png' %}">
   <link rel="stylesheet" href="{% static 'hbl/css/app.css' %}">
   <link rel="stylesheet" href="{% static 'hbl/css/premium.css' %}">
+  <link rel="stylesheet" href="{% static 'hbl/css/responsive.css' %}">
   <style>@media (max-width:920px) and (min-width:781px){.sidebar .nav-link>.nav-icon{display:grid!important}}</style>
   <script defer src="{% static 'hbl/js/app.js' %}"></script>
   <script defer src="{% static 'hbl/js/pwa.js' %}"></script>
@@ -52,7 +53,7 @@
       <header class="topbar">
         <div><span class="eyebrow">HBL EXPERIENCE</span><strong>Hola, {{ user.first_name|default:'miembro' }}</strong></div>
         <div class="topbar-actions">
-          <a class="mini-action" href="{% url 'hbl_gifts' %}" title="Código de regalo" aria-label="Código de regalo"><svg viewBox="0 0 24 24"><path d="M4 10h16v10H4zM2 7h20v3H2zM12 7v13"/><path d="M12 7H8.5A2.5 2.5 0 1 1 11 4.5zM12 7h3.5A2.5 2.5 0 1 0 13 4.5z"/></svg></a>
+          <a class="mini-action" href="{% url 'hbl_gifts' %}" title="Código de regalo" aria-label="Código de regalo"><svg viewBox="0 0 24 24"><path d="M4 10h16v10H5a2 2 0 0 1-2-2V7a3 3 0 0 1 3-3h11"/><path d="M16 11h4v4h-4a2 2 0 0 1 0-4z"/></svg></a>
           <a class="balance-pill" href="{% url 'hbl_wallet' %}"><small>Saldo</small><b>{{ platform_config.base_currency_symbol|default:'C$' }} {{ user.saldo|default:'0.00' }}</b></a>
         </div>
       </header>
