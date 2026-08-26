@@ -24,7 +24,11 @@ from .nowpayments import (
     reconcile_deposit,
     verify_ipn_signature,
 )
-from .nowpayments_catalog import decorate_method, sync_nowpayments_methods
+from .nowpayments_catalog import (
+    ALLOWED_PAYMENT_SYMBOLS,
+    decorate_method,
+    sync_nowpayments_methods,
+)
 from .payment_forms import CryptoDepositForm
 from .payment_policies import CRYPTO_DEPOSIT_KINDS, USDT_OPERATION_FEE
 from .services import HBLError, display_money
@@ -36,7 +40,17 @@ CRYPTO_QUANT = Decimal("0.00000001")
 
 
 def _payment_methods():
-    return PaymentMethod.objects.filter(active=True, kind__in=ALLOWED_KINDS).order_by("sort_order", "label")
+    """Devuelve únicamente las monedas que HBL decidió ofrecer al usuario.
+
+    Este filtro vive también en la vista, no solo en la sincronización de
+    NOWPayments. Así, aunque la base conserve métodos antiguos activos de una
+    versión previa, jamás vuelven a aparecer en el selector de la billetera.
+    """
+    return PaymentMethod.objects.filter(
+        active=True,
+        kind__in=ALLOWED_KINDS,
+        currency__in=ALLOWED_PAYMENT_SYMBOLS,
+    ).order_by("sort_order", "label")
 
 
 def _credit_rate_usdt():
@@ -141,8 +155,8 @@ def wallet(request):
         rate = _credit_rate_usdt()
         config = PlatformConfig.get_solo()
 
-        if method.kind not in ALLOWED_KINDS:
-            form.add_error("payment_method", "Selecciona una criptomoneda disponible en NOWPayments.")
+        if method.kind not in ALLOWED_KINDS or method.currency not in ALLOWED_PAYMENT_SYMBOLS:
+            form.add_error("payment_method", "Selecciona una de las criptomonedas habilitadas por HBL.")
         elif not _integration_ready():
             form.add_error(None, "Los depósitos automáticos están temporalmente fuera de servicio.")
         elif rate <= 0:
