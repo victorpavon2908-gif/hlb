@@ -5,18 +5,11 @@
   <span class="eyebrow">HBL WALLET · RECARGAS</span>
   <h1>Deposita USDT por TRC20 o BEP20.</h1>
   <p>
-    Depósito mínimo global: <b>{{ minimum_deposit_usdt }} USDT</b> · equivalente actual
-    {{ config.base_currency_symbol }} {{ minimum_deposit_nio }} {{ config.base_currency_code }}.
-    NOWPayments detecta el pago y HBL acredita el saldo solamente después de la confirmación final.
+    Escribe cuánto deseas acreditar y HBL suma automáticamente <b>1 USDT</b> al total de la orden.
+    Ejemplo: si deseas acreditar <b>10 USDT</b>, la orden se genera por <b>11 USDT</b>.
+    El saldo se acredita únicamente cuando NOWPayments confirma el pago completo.
   </p>
 </section>
-
-{% if nowpayments_test_mode %}
-<div class="form-policy space-bottom">
-  <b>Modo de prueba activo.</b>
-  El mínimo temporal de HBL es {{ minimum_deposit_usdt }} USDT. NOWPayments puede aplicar un mínimo propio superior según la red y sus comisiones actuales.
-</div>
-{% endif %}
 
 {% if active_payment %}
 <section class="panel glass-card space-bottom">
@@ -24,40 +17,50 @@
     <div class="panel-icon">₮</div>
     <div><span class="eyebrow">ORDEN ACTIVA</span><h2>Completa tu depósito</h2></div>
   </div>
-  <div class="form-policy">
-    <b>Envía exactamente {{ active_payment.payment_amount }} USDT por {{ active_payment.payment_method.network }}.</b>
-    Ese total incluye la comisión estimada por NOWPayments. No uses otra moneda ni otra red.
-    La comisión que cobre tu propia billetera por enviar debe pagarse aparte: la dirección debe recibir el total exacto indicado.
+
+  {% if active_payment.is_partial_payment %}
+  <div class="form-policy space-bottom">
+    <b>Pago parcial recibido.</b>
+    Hemos recibido {{ active_payment.provider_actual_paid|default:'0' }} USDT y faltan
+    <strong>{{ active_payment.remaining_payment }} USDT</strong> para completar esta orden.
+    Envía el faltante a la misma dirección y HBL seguirá verificando el pago automáticamente.
   </div>
+  {% endif %}
+
   <div class="method-card rich-method">
     <div class="method-icon">↓</div>
     <div>
-      <strong>Total a enviar: {{ active_payment.payment_amount }} USDT</strong>
-      <span>Monto a acreditar: {{ active_payment.provider_price_amount }} USDT</span>
-      <span>Comisión estimada: {{ active_payment.provider_fee_amount }} USDT</span>
-      <label for="sender-network-fee"><small>Comisión que muestra tu billetera/red (estimada)</small></label>
-      <input
-        id="sender-network-fee"
-        class="mini-input"
-        type="number"
-        min="0"
-        step="0.00000001"
-        value="{{ active_payment.sender_network_fee_estimate }}"
-        inputmode="decimal"
-      >
-      <strong>
-        Saldo mínimo recomendado en tu billetera:
-        <span id="wallet-balance-required" data-pay-amount="{{ active_payment.payment_amount }}">{{ active_payment.wallet_balance_required }}</span> USDT
-      </strong>
-      <small>Si tu billetera muestra otra tarifa, escríbela arriba. La dirección siempre debe recibir {{ active_payment.payment_amount }} USDT.</small>
-      {% if active_payment.provider_actual_paid %}<span>Recibido por NOWPayments: {{ active_payment.provider_actual_paid }} USDT</span>{% endif %}
-      <span>{{ active_payment.payment_method.label }} · NOWPayments #{{ active_payment.provider_payment_id }}</span>
+      <strong>Total exacto a enviar: {{ active_payment.payment_amount }} USDT</strong>
+      <span>Monto que se acreditará: {{ active_payment.provider_price_amount }} USDT</span>
+      <span>Cargo fijo HBL: {{ usdt_operation_fee }} USDT</span>
+      {% if active_payment.provider_actual_paid %}
+      <span>Recibido hasta ahora: {{ active_payment.provider_actual_paid }} USDT</span>
+      {% endif %}
+      <span>{{ active_payment.payment_method.label }} · Orden #{{ active_payment.provider_payment_id }}</span>
       <code id="active-payment-address">{{ active_payment.pay_address }}</code>
       <button class="secondary-btn" type="button" data-copy="#active-payment-address" style="width:max-content;min-height:32px;padding:6px 10px;margin-top:5px">
         Copiar dirección
       </button>
-      <small>Estado del proveedor: {{ active_payment.provider_status|default:'waiting' }}</small>
+      <small>
+        {% if active_payment.provider_status == 'partially_paid' %}
+          Pago parcial detectado · completa el faltante.
+        {% elif active_payment.provider_status == 'waiting' %}
+          Esperando que llegue el pago.
+        {% elif active_payment.provider_status == 'confirming' or active_payment.provider_status == 'confirmed' %}
+          Pago detectado · esperando confirmaciones de la red.
+        {% elif active_payment.provider_status == 'sending' %}
+          Confirmación final en proceso.
+        {% else %}
+          Verificación automática en curso.
+        {% endif %}
+      </small>
     </div>
+  </div>
+
+  <div class="form-policy space-top">
+    <b>Importante.</b>
+    La dirección debe recibir el total exacto indicado arriba. Tu billetera puede cobrar su propia comisión de red por separado;
+    esa comisión no debe restarse del monto que llega a la dirección de pago.
   </div>
 </section>
 {% endif %}
@@ -71,8 +74,8 @@
 
     {% if not nowpayments_ready %}
     <div class="form-policy">
-      <b>Depósitos temporalmente no disponibles.</b>
-      La integración segura con NOWPayments aún no está configurada.
+      <b>Depósitos no disponibles por el momento.</b>
+      Intenta nuevamente más tarde.
     </div>
     {% endif %}
 
@@ -91,8 +94,9 @@
       {% endfor %}
 
       <div class="form-policy">
-        <b>Comisiones calculadas automáticamente.</b>
-        Escribe el monto que deseas acreditar. NOWPayments agregará sus comisiones al total exacto que debes enviar. No necesitas pegar un TXID ni subir un comprobante. Los pagos parciales o inconsistentes pasan a revisión administrativa sin acreditarse automáticamente.
+        <b>Cargo fijo: 1 USDT.</b>
+        El monto que escribas es exactamente lo que HBL acreditará a tu cuenta. Al crear la orden se sumará 1 USDT al total a pagar.
+        No necesitas pegar TXID ni subir comprobantes: la confirmación es automática.
       </div>
 
       <button class="primary-btn glow-btn" type="submit" {% if not nowpayments_ready %}disabled{% endif %}>Generar dirección de depósito</button>
@@ -111,24 +115,24 @@
         <strong>{{ method.label }}</strong>
         <span>{{ method.currency }} · {{ method.network }}</span>
         <small>
-          Mín. {{ method.min_amount }} {{ method.currency }}
-          {% if method.max_amount > 0 %} · Máx. {{ method.max_amount }} {{ method.currency }}{% endif %}
-          · detección automática · revisión manual disponible
+          Mínimo a acreditar: {{ method.min_amount }} {{ method.currency }}
+          {% if method.max_amount > 0 %} · Máximo: {{ method.max_amount }} {{ method.currency }}{% endif %}
+          · HBL suma 1 USDT al total
         </small>
         {% if method.instructions %}<p>{{ method.instructions }}</p>{% endif %}
       </div>
     </div>
     {% empty %}
     <div class="form-policy">
-      <b>No hay redes activas.</b>
-      Administración debe configurar la API y el secreto IPN de NOWPayments.
+      <b>No hay redes disponibles.</b>
+      Intenta nuevamente más tarde.
     </div>
     {% endfor %}
 
     <div class="form-policy space-top">
-      <b>Importante.</b>
+      <b>Seguridad.</b>
       Envía únicamente USDT y usa exactamente la red indicada. Una red incorrecta puede ocasionar la pérdida de los fondos.
-      Nunca compartas frases semilla, claves privadas ni códigos 2FA.
+      HBL nunca te pedirá frase semilla, clave privada, contraseña ni códigos 2FA.
     </div>
   </section>
 </div>
@@ -141,39 +145,43 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Fecha</th><th>Método</th><th>A acreditar</th><th>Comisión</th><th>Total a enviar</th><th>Red estimada</th><th>Saldo recomendado</th><th>Recibido</th><th>Saldo HBL</th><th>Estado</th><th>Validación</th></tr>
+        <tr><th>Fecha</th><th>Red</th><th>Acreditas</th><th>Cargo HBL</th><th>Total</th><th>Recibido</th><th>Estado</th><th>Detalle</th></tr>
       </thead>
       <tbody>
         {% for dep in deposits %}
         <tr>
           <td>{{ dep.submitted_at|date:'d/m/Y H:i' }}</td>
           <td>{{ dep.payment_method.label }}</td>
-          <td>{% if dep.provider_payment_id %}{{ dep.provider_price_amount }}{% else %}{{ dep.payment_amount }}{% endif %} {{ dep.payment_currency }}</td>
-          <td>{% if dep.provider_payment_id %}{{ dep.provider_fee_amount }} {{ dep.payment_currency }}{% else %}—{% endif %}</td>
+          <td>{{ dep.provider_price_amount|default:dep.payment_amount }} {{ dep.payment_currency }}</td>
+          <td>{% if dep.provider_payment_id %}{{ dep.operation_fee_usdt }} USDT{% else %}—{% endif %}</td>
           <td>{{ dep.payment_amount }} {{ dep.payment_currency }}</td>
-          <td>{% if dep.provider_payment_id %}{{ dep.sender_network_fee_estimate }} {{ dep.payment_currency }}{% else %}—{% endif %}</td>
-          <td>{% if dep.provider_payment_id %}{{ dep.wallet_balance_required }} {{ dep.payment_currency }}{% else %}{{ dep.payment_amount }} {{ dep.payment_currency }}{% endif %}</td>
-          <td>{% if dep.provider_actual_paid %}{{ dep.provider_actual_paid }} {{ dep.payment_currency }}{% elif dep.provider_payment_id %}<span class="muted">Sin informar</span>{% else %}—{% endif %}</td>
-          <td>{{ config.base_currency_symbol }} {{ dep.amount }} {{ config.base_currency_code }}</td>
+          <td>
+            {% if dep.provider_actual_paid %}
+              {{ dep.provider_actual_paid }} {{ dep.payment_currency }}
+            {% elif dep.provider_payment_id %}
+              <span class="muted">Pendiente</span>
+            {% else %}—{% endif %}
+          </td>
           <td><span class="status {{ dep.status }}">{{ dep.get_status_display }}</span></td>
           <td>
-            {% if dep.status == 'processing' %}
-              <span class="muted">Esperando confirmación final de NOWPayments</span>
+            {% if dep.is_partial_payment %}
+              <span>Pago parcial · faltan <b>{{ dep.remaining_payment }} USDT</b></span>
+            {% elif dep.status == 'processing' %}
+              <span class="muted">Esperando confirmación automática</span>
             {% elif dep.status == 'pending' %}
-              <span class="muted">Revisión manual requerida</span>
+              <span class="muted">Verificación de seguridad en curso</span>
             {% elif dep.status == 'approved' %}
               <span class="positive">Confirmada y acreditada</span>
             {% elif dep.status == 'rejected' %}
-              <span class="negative">Rechazada, sin acreditar</span>
+              <span class="negative">No acreditada</span>
             {% elif dep.status == 'expired' %}
               <span class="muted">Orden expirada</span>
             {% endif %}
-            {% if dep.provider_payment_id %}<small class="muted">NOWPayments #{{ dep.provider_payment_id }} · {{ dep.provider_status }}</small>{% endif %}
-            {% if dep.notes %}<small class="muted">{{ dep.notes|truncatechars:150 }}</small>{% endif %}
+            {% if dep.provider_payment_id %}<small class="muted">Orden #{{ dep.provider_payment_id }}</small>{% endif %}
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="11">Sin recargas.</td></tr>
+        <tr><td colspan="8">Todavía no tienes recargas.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -184,18 +192,6 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  const networkFeeInput = document.getElementById('sender-network-fee');
-  const walletBalance = document.getElementById('wallet-balance-required');
-  if (networkFeeInput && walletBalance) {
-    const payAmount = Number(walletBalance.dataset.payAmount || 0);
-    const updateWalletBalance = () => {
-      const networkFee = Math.max(0, Number(networkFeeInput.value || 0));
-      walletBalance.textContent = (payAmount + networkFee).toFixed(8);
-    };
-    networkFeeInput.addEventListener('input', updateWalletBalance);
-    updateWalletBalance();
-  }
-
   const url = "{% url 'hbl_crypto_recheck' %}";
   let attempts = 0;
   const maxAttempts = 36;
