@@ -24,13 +24,14 @@ from .nowpayments import (
     reconcile_deposit,
     verify_ipn_signature,
 )
-from .payment_policies import CRYPTO_DEPOSIT_KINDS
+from .payment_policies import CRYPTO_DEPOSIT_KINDS, USDT_OPERATION_FEE
 from .services import HBLError, display_money
 
 
 logger = logging.getLogger(__name__)
 CRYPTO_KINDS = list(CRYPTO_DEPOSIT_KINDS)
 ALLOWED_KINDS = CRYPTO_KINDS
+USDT_QUANT = Decimal("0.00000001")
 
 
 def _payment_methods():
@@ -59,6 +60,21 @@ def _callback_url(request):
 
 def _integration_ready():
     return bool(settings.NOWPAYMENTS_API_KEY and settings.NOWPAYMENTS_IPN_SECRET)
+
+
+def _decorate_deposit_for_ui(deposit):
+    """Añade únicamente datos calculados para una interfaz limpia y comprensible."""
+    if not deposit:
+        return None
+    target = Decimal(deposit.payment_amount or 0)
+    received = Decimal(deposit.provider_actual_paid or 0)
+    deposit.remaining_payment = max(target - received, Decimal("0")).quantize(USDT_QUANT)
+    deposit.is_partial_payment = (
+        deposit.provider_status == "partially_paid"
+        or (received > 0 and target > 0 and received < target)
+    )
+    deposit.operation_fee_usdt = USDT_OPERATION_FEE
+    return deposit
 
 
 @login_required
@@ -92,7 +108,7 @@ def wallet(request):
                     payment_amount=requested_usdt,
                     payment_currency="USDT",
                     balance_rate=rate,
-                    sender_network_fee_estimate=method.sender_network_fee_estimate,
+                    sender_network_fee_estimate=Decimal("0"),
                     status=Deposit.Status.PROCESSING,
                     provider=NOWPAYMENTS_PROVIDER,
                     provider_price_amount=requested_usdt,
@@ -103,9 +119,9 @@ def wallet(request):
                     deposit.provider_payment_id = remote["payment_id"]
                     deposit.provider_status = remote["payment_status"]
                     deposit.pay_address = remote["pay_address"]
-                    deposit.payment_amount = remote["pay_amount"].quantize(Decimal("0.00000001"))
-                    deposit.provider_fee_amount = remote["fee_amount"]
-                    deposit.notes = "Orden creada. Esperando que NOWPayments confirme el pago como finalizado."
+                    deposit.payment_amount = remote["pay_amount"].quantize(USDT_QUANT)
+                    deposit.provider_fee_amount = USDT_OPERATION_FEE
+                    deposit.notes = "Orden creada. Esperando que NOWPayments confirme el pago."
                     deposit.save()
                 except (NowPaymentsError, IntegrityError) as exc:
                     logger.warning("No se pudo crear la orden NOWPayments para el usuario %s: %s", request.user.pk, exc)
@@ -113,11 +129,16 @@ def wallet(request):
                 else:
                     messages.success(
                         request,
-                        "Orden creada. Envía exactamente el monto indicado a la dirección generada; HBL validará el depósito automáticamente.",
+                        f"Orden creada: acreditarás {requested_usdt} USDT y el cargo fijo HBL es 1 USDT. Envía el total exacto mostrado.",
                     )
                     return redirect("hbl_wallet")
 
-    deposits = Deposit.objects.filter(user=request.user).select_related("payment_method")[:12]
+    deposits = list(
+        Deposit.objects.filter(user=request.user).select_related("payment_method")[:12]
+    )
+    for item in deposits:
+        _decorate_deposit_for_ui(item)
+
     active_payment = (
         Deposit.objects.filter(
             user=request.user,
@@ -128,6 +149,8 @@ def wallet(request):
         .select_related("payment_method")
         .first()
     )
+    _decorate_deposit_for_ui(active_payment)
+
     ledger = RewardLedger.objects.filter(user=request.user)[:15]
     config = PlatformConfig.get_solo()
     usd_rate_row = CurrencyRate.objects.filter(code="USD", active=True).first()
@@ -158,6 +181,7 @@ def wallet(request):
         "minimum_withdraw_preferred": minimum_withdraw_preferred,
         "nowpayments_ready": _integration_ready(),
         "nowpayments_test_mode": settings.NOWPAYMENTS_TEST_MODE,
+        "usdt_operation_fee": USDT_OPERATION_FEE,
     })
 
 
@@ -190,7 +214,7 @@ def recheck_crypto_deposits(request):
     processing = Deposit.objects.filter(
         user=request.user,
         provider=NOWPAYMENTS_PROVIDER,
-        status=Deposit.Status.PROCESSING,
+        status__in=[Deposit.Status.PROCESSING, Deposit.Status.PENDING],
         payment_method__kind__in=CRYPTO_KINDS,
     ).count()
     return JsonResponse({
