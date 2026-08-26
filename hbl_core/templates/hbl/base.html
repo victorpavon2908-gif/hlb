@@ -4,12 +4,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#070a12">
+  <meta name="theme-color" content="#070b14">
   <meta name="description" content="HBL Music Rewards">
   <title>{% block title %}HBL{% endblock %}</title>
   <link rel="manifest" href="{% static 'hbl/manifest.webmanifest' %}">
   <link rel="icon" href="{% static 'hbl/img/icon-192.png' %}">
   <link rel="stylesheet" href="{% static 'hbl/css/app.css' %}">
+  <link rel="stylesheet" href="{% static 'hbl/css/premium.css' %}">
   <script defer src="{% static 'hbl/js/app.js' %}"></script>
   <script defer src="{% static 'hbl/js/pwa.js' %}"></script>
   {% block head %}{% endblock %}
@@ -31,15 +32,15 @@
         </div>
       </div>
       <nav>
-        <a href="{% url 'hbl_home' %}" class="nav-link">♫ <span>Escuchar</span></a>
-        <a href="{% url 'hbl_plans' %}" class="nav-link">◆ <span>Planes</span></a>
-        <a href="{% url 'hbl_wallet' %}" class="nav-link">◈ <span>Billetera</span></a>
-        <a href="{% url 'hbl_withdrawals' %}" class="nav-link">↗ <span>Retiros</span></a>
-        <a href="{% url 'hbl_wheel' %}" class="nav-link nav-special">✦ <span>Ruleta</span></a>
-        <a href="{% url 'hbl_gifts' %}" class="nav-link">🎁 <span>Códigos regalo</span></a>
-        <a href="{% url 'hbl_referrals' %}" class="nav-link">◎ <span>Referidos</span></a>
-        <a href="{% url 'hbl_profile' %}" class="nav-link">◉ <span>Perfil</span></a>
-        {% if user.is_staff %}<a href="{% url 'hbl_control_dashboard' %}" class="nav-link admin-link">⚙ <span>HBL Control</span></a>{% endif %}
+        <a href="{% url 'hbl_home' %}" class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></span><span>Escuchar</span></a>
+        <a href="{% url 'hbl_plans' %}" class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 3l7 4v10l-7 4-7-4V7z"/><path d="M9 12l2 2 4-5"/></svg></span><span>Planes</span></a>
+        <a href="{% url 'hbl_wallet' %}" class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 6h14a2 2 0 0 1 2 2v10H5a2 2 0 0 1-2-2V7a3 3 0 0 1 3-3h11"/><path d="M16 11h4v4h-4a2 2 0 0 1 0-4z"/></svg></span><span>Billetera</span></a>
+        <a href="{% url 'hbl_withdrawals' %}" class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M7 17L17 7"/><path d="M9 7h8v8"/><path d="M5 5v14h14"/></svg></span><span>Retiros</span></a>
+        <a href="{% url 'hbl_wheel' %}" class="nav-link nav-special"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 2v3M12 19v3M4.9 4.9L7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/><circle cx="12" cy="12" r="5"/></svg></span><span>Ruleta</span></a>
+        <a href="{% url 'hbl_gifts' %}" class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 10h16v10H4zM2 7h20v3H2zM12 7v13"/><path d="M12 7H8.5A2.5 2.5 0 1 1 11 4.5zM12 7h3.5A2.5 2.5 0 1 0 13 4.5z"/></svg></span><span>Códigos regalo</span></a>
+        <a href="{% url 'hbl_referrals' %}" class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-4 2.5-6 6-6s6 2 6 6"/><circle cx="17" cy="9" r="2"/><path d="M16 14c3 0 5 1.5 5 5"/></svg></span><span>Referidos</span></a>
+        <a href="{% url 'hbl_profile' %}" class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-5 3-8 8-8s8 3 8 8"/></svg></span><span>Perfil</span></a>
+        {% if user.is_staff %}<a href="{% url 'hbl_control_dashboard' %}" class="nav-link admin-link"><span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1z"/></svg></span><span>HBL Control</span></a>{% endif %}
       </nav>
       <form action="{% url 'hbl_logout' %}" method="post" class="logout-form">{% csrf_token %}<button class="ghost-btn" type="submit">Cerrar sesión</button></form>
     </aside>
@@ -50,7 +51,7 @@
       <header class="topbar">
         <div><span class="eyebrow">HBL EXPERIENCE</span><strong>Hola, {{ user.first_name|default:'miembro' }}</strong></div>
         <div class="topbar-actions">
-          <a class="mini-action" href="{% url 'hbl_gifts' %}" title="Código de regalo" aria-label="Código de regalo">🎁</a>
+          <a class="mini-action" href="{% url 'hbl_gifts' %}" title="Código de regalo" aria-label="Código de regalo"><svg viewBox="0 0 24 24"><path d="M4 10h16v10H4zM2 7h20v3H2zM12 7v13"/><path d="M12 7H8.5A2.5 2.5 0 1 1 11 4.5zM12 7h3.5A2.5 2.5 0 1 0 13 4.5z"/></svg></a>
           <a class="balance-pill" href="{% url 'hbl_wallet' %}"><small>Saldo</small><b>{{ platform_config.base_currency_symbol|default:'C$' }} {{ user.saldo|default:'0.00' }}</b></a>
         </div>
       </header>
@@ -61,12 +62,20 @@
 
     {% if user.is_authenticated %}
     <nav class="mobile-nav" aria-label="Navegación móvil">
-      <a href="{% url 'hbl_home' %}">♫<span>Inicio</span></a>
-      <a href="{% url 'hbl_wallet' %}">◈<span>Wallet</span></a>
-      <a href="{% url 'hbl_withdrawals' %}">↗<span>Retirar</span></a>
-      <a href="{% url 'hbl_wheel' %}" class="mobile-special">✦<span>Ruleta</span></a>
-      <a href="{% url 'hbl_referrals' %}">◎<span>Referidos</span></a>
-      <a href="{% url 'hbl_profile' %}">◉<span>Perfil</span></a>
+      <a href="{% url 'hbl_home' %}"><span class="mobile-icon"><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></span><span>Inicio</span></a>
+      <a href="{% url 'hbl_wallet' %}"><span class="mobile-icon"><svg viewBox="0 0 24 24"><path d="M4 6h14a2 2 0 0 1 2 2v10H5a2 2 0 0 1-2-2V7a3 3 0 0 1 3-3h11"/><path d="M16 11h4v4h-4a2 2 0 0 1 0-4z"/></svg></span><span>Wallet</span></a>
+      <a href="{% url 'hbl_withdrawals' %}"><span class="mobile-icon"><svg viewBox="0 0 24 24"><path d="M7 17L17 7"/><path d="M9 7h8v8"/></svg></span><span>Retirar</span></a>
+      <a href="{% url 'hbl_wheel' %}" class="mobile-special"><span class="mobile-icon"><svg viewBox="0 0 24 24"><path d="M12 2v3M12 19v3M4.9 4.9L7 7M17 17l2.1 2.1M2 12h3M19 12h3"/><circle cx="12" cy="12" r="5"/></svg></span><span>Ruleta</span></a>
+      <details class="mobile-more">
+        <summary><span class="mobile-icon"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/></svg></span><span>Más</span></summary>
+        <div class="mobile-more-menu">
+          <a href="{% url 'hbl_plans' %}"><svg viewBox="0 0 24 24"><path d="M12 3l7 4v10l-7 4-7-4V7z"/></svg>Planes</a>
+          <a href="{% url 'hbl_referrals' %}"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-4 2.5-6 6-6s6 2 6 6"/></svg>Referidos</a>
+          <a href="{% url 'hbl_gifts' %}"><svg viewBox="0 0 24 24"><path d="M4 10h16v10H4zM2 7h20v3H2zM12 7v13"/></svg>Códigos regalo</a>
+          <a href="{% url 'hbl_profile' %}"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-5 3-8 8-8s8 3 8 8"/></svg>Perfil</a>
+          {% if user.is_staff %}<a href="{% url 'hbl_control_dashboard' %}"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>HBL Control</a>{% endif %}
+        </div>
+      </details>
     </nav>
     {% endif %}
   </div>
