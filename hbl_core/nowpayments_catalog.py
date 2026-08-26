@@ -11,10 +11,11 @@ from django.core.cache import cache
 
 from .models import CurrencyRate, PaymentMethod, PlatformConfig
 from .nowpayments import NowPaymentsClient, NowPaymentsError
+from .payment_policies import GLOBAL_MIN_DEPOSIT_USDT
 
 logger = logging.getLogger(__name__)
 
-CATALOG_CACHE_KEY = "hbl:nowpayments:merchant-coins:v5"
+CATALOG_CACHE_KEY = "hbl:nowpayments:merchant-coins:v6"
 CATALOG_CACHE_SECONDS = 3600
 CRYPTO_KINDS = [
     PaymentMethod.Kind.USDT_TRC20,
@@ -233,6 +234,10 @@ def _deactivate_disallowed_existing() -> None:
     PaymentMethod.objects.filter(kind__in=CRYPTO_KINDS).exclude(
         currency__in=ALLOWED_PAYMENT_SYMBOLS,
     ).update(active=False)
+    PaymentMethod.objects.filter(
+        kind__in=CRYPTO_KINDS,
+        currency__in=ALLOWED_PAYMENT_SYMBOLS,
+    ).update(min_amount=GLOBAL_MIN_DEPOSIT_USDT)
 
 
 def _usdt_rate(config: PlatformConfig) -> Decimal:
@@ -274,9 +279,9 @@ def _apply_method_values(method: PaymentMethod, *, code: str, index: int, min_cr
     method.destination = code
     method.instructions = (
         f"Paga con {meta['symbol']} por {meta['network']}. "
-        "NOWPayments generará la dirección, el monto exacto y cualquier memo/tag requerido."
+        "Mínimo a acreditar: 10 USDT. NOWPayments generará la dirección, el monto exacto y cualquier memo/tag requerido."
     )
-    method.min_amount = min_credit
+    method.min_amount = GLOBAL_MIN_DEPOSIT_USDT
     method.max_amount = Decimal("0")
     method.require_proof = False
     method.require_txid = False
@@ -319,11 +324,7 @@ def sync_nowpayments_methods(*, force: bool = False, client: NowPaymentsClient |
         return _active_count()
 
     config = PlatformConfig.get_solo()
-    min_credit = (
-        Decimal(settings.NOWPAYMENTS_TEST_MIN_USDT)
-        if settings.NOWPAYMENTS_TEST_MODE
-        else Decimal(config.minimum_deposit_usd)
-    )
+    min_credit = GLOBAL_MIN_DEPOSIT_USDT
     rate = _usdt_rate(config)
 
     existing = list(PaymentMethod.objects.filter(kind__in=CRYPTO_KINDS).order_by("id"))
